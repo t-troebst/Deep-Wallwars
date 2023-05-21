@@ -41,7 +41,7 @@ double SimplePolicy::step_prior(Direction dir) const {
         return bad_move_bias / total_move_prior;
     }
 
-    return total_move_prior;
+    return 1.0 / total_move_prior;
 }
 
 double SimplePolicy::wall_prior(Wall) const {
