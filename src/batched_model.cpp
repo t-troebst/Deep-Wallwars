@@ -27,6 +27,7 @@ BatchedModel::BatchedModel(std::shared_ptr<nv::IRuntime> runtime, std::span<std:
       m_tasks(opts.queue_size) {
     // TODO: validate model and throw exception if it doesn't match
 
+    m_context->setTensorAddress("States", m_states.device_ptr());
     m_context->setTensorAddress("Priors", m_priors.device_ptr());
     m_context->setTensorAddress("Values", m_values.device_ptr());
 
