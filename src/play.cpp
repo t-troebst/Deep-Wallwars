@@ -1,7 +1,6 @@
 #include "play.hpp"
 
 #include <algorithm>
-#include <execution>
 #include <iostream>
 #include <random>
 #include <sstream>
@@ -50,19 +49,16 @@ double computer_eval(std::unique_ptr<MCTSPolicy> policy1, std::unique_ptr<MCTSPo
     std::vector<std::pair<Player, Player>> wins(games);
     int policy1_wins = 0;
 
-    std::for_each(std::execution::par, wins.begin(), wins.end(),
-                  [&](std::pair<Player, Player>& winners) {
-                      std::random_device rd{};
-                      std::stringstream game_out;
+    std::for_each(wins.begin(), wins.end(), [&](std::pair<Player, Player>& winners) {
+        std::random_device rd{};
+        std::stringstream game_out;
 
-                      winners.first =
-                          computer_play(policy1->clone(), policy2->clone(), board, game_out, rd());
-                      winners.second =
-                          computer_play(policy2->clone(), policy1->clone(), board, game_out, rd());
+        winners.first = computer_play(policy1->clone(), policy2->clone(), board, game_out, rd());
+        winners.second = computer_play(policy2->clone(), policy1->clone(), board, game_out, rd());
 
-                      std::cout << winners.first << " won first game and " << winners.second
-                                << " won second game.\n";
-                  });
+        std::cout << winners.first << " won first game and " << winners.second
+                  << " won second game.\n";
+    });
 
     for (auto const& winners : wins) {
         if (winners.first == Player::Red) {

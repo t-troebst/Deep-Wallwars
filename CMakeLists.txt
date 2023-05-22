@@ -1,29 +1,30 @@
 cmake_minimum_required(VERSION 3.26)
 project(DeepWallwars CXX)
 
-list(APPEND CMAKE_PREFIX_PATH "libtorch")
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Torch REQUIRED)
+find_package(CUDA REQUIRED)
+find_package(gflags REQUIRED)
+find_package(folly REQUIRED)
+# TODO: find TensorRT with CMake
 
 add_library(core OBJECT
+    src/batched_model.cpp
     src/gamestate.cpp
     src/mcts.cpp
-    src/simple_policy.cpp
-    src/dnn_policy.cpp
     src/play.cpp
 )
-target_link_libraries(core PUBLIC torch tbb)
+target_link_libraries(core PUBLIC Folly::folly ${CUDA_LIBS} nvinfer nvonnxparser)
+target_include_directories(core PRIVATE ${CUDA_INCLUDE_DIRS})
 
 add_executable(deep_ww
     src/main.cpp
 )
 target_link_libraries(deep_ww PRIVATE core)
 
-# Unit tests
+# Unit tests (optional)
 find_package(Catch2 3)
 if (Catch2_FOUND)
     add_executable(unit_tests

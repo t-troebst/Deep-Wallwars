@@ -1,6 +1,17 @@
 # MCTS with Neural Nets for Wallwars
 
-This is in very early stages and probably still somewhat broken. D:
-Uses libtorch and C++ standard parallelism which turns out doesn't work well.
-Might switch to a different library.
-Also uses Catch 3 for unit tests (the few that I wrote - its a prototype...).
+This project is in active development and not yet working. :)
+
+# Dependencies (C++)
+
+Required:
+* gflags (for command line flags)
+* folly (for coroutines, logging, thread pools)
+* CUDA & TensorRT (for inference)
+
+Optional:
+* Catch2 v3 (for unit tests)
+
+# Dependencies (Python)
+
+TODO
