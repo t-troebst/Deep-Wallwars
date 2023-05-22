@@ -5,19 +5,19 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(CUDA REQUIRED)
+find_package(CUDAToolkit REQUIRED)
 find_package(gflags REQUIRED)
 find_package(folly REQUIRED)
 # TODO: find TensorRT with CMake
 
 add_library(core OBJECT
     src/batched_model.cpp
+    src/cuda_wrappers.cpp
     src/gamestate.cpp
     src/mcts.cpp
     src/play.cpp
 )
-target_link_libraries(core PUBLIC Folly::folly ${CUDA_LIBS} nvinfer nvonnxparser)
-target_include_directories(core PRIVATE ${CUDA_INCLUDE_DIRS})
+target_link_libraries(core PUBLIC Folly::folly CUDA::cudart nvinfer nvonnxparser)
 
 add_executable(deep_ww
     src/main.cpp
