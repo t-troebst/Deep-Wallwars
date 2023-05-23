@@ -27,6 +27,7 @@ private:
 template <typename T>
 class CudaBuffer {
 public:
+    CudaBuffer();
     CudaBuffer(std::size_t size);
 
     CudaBuffer(CudaBuffer const& other);

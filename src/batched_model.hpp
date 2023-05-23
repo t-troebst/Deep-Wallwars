@@ -21,20 +21,13 @@ public:
     };
 
     struct Output {
-        std::vector<double> priors;
+        std::vector<double> wall_prior;
+        std::vector<double> step_prior;
         double value;
     };
 
-    struct Options {
-        int board_width;
-        int board_height;
-        int history_length = 1;
-        int batch_size = 64;
-        int queue_size = batch_size * 16;
-    };
-
-    BatchedModel(std::shared_ptr<nvinfer1::IRuntime> runtime, std::span<std::byte> model,
-                 Options const& opts);
+    BatchedModel(nvinfer1::ICudaEngine& engine, int batch_size);
+    BatchedModel(nvinfer1::ICudaEngine& engine, int batch_size, int queue_size);
 
     ~BatchedModel();
 
@@ -52,18 +45,16 @@ private:
         folly::Promise<Output> output;
     };
 
-    int m_board_width;
-    int m_board_height;
-    int m_history_length;
+    int m_state_size;
+    int m_wall_prior_size;
     int m_batch_size;
 
-    std::shared_ptr<nvinfer1::IRuntime> m_runtime;
-    std::unique_ptr<nvinfer1::ICudaEngine> m_engine;
     std::unique_ptr<nvinfer1::IExecutionContext> m_context;
 
     CudaStream m_stream;
     CudaBuffer<double> m_states;
-    CudaBuffer<double> m_priors;
+    CudaBuffer<double> m_wall_priors;
+    CudaBuffer<double> m_step_priors;
     CudaBuffer<double> m_values;
 
     folly::MPMCQueue<InferenceTask> m_tasks;

@@ -9,26 +9,57 @@
 
 namespace nv = nvinfer1;
 
-constexpr int kLayersPerHistory = 7;
+constexpr int kNumWallTypes = 2;
+constexpr int kNumDirections = 4;
+constexpr int kDefaultBatchesInQueue = 16;
 
-BatchedModel::BatchedModel(std::shared_ptr<nv::IRuntime> runtime, std::span<std::byte> model,
-                           Options const& opts)
-    : m_board_width{opts.board_width},
-      m_board_height{opts.board_height},
-      m_history_length{opts.history_length},
-      m_batch_size{opts.batch_size},
-      m_runtime{runtime},
-      m_engine{runtime->deserializeCudaEngine(model.data(), model.size())},
-      m_context{m_engine->createExecutionContext()},
-      m_states(opts.batch_size * opts.history_length * opts.board_width * opts.board_height *
-               (kLayersPerHistory + 1)),
-      m_priors(opts.batch_size * (opts.board_width * opts.board_height * 2 + 4)),
-      m_values(opts.batch_size),
-      m_tasks(opts.queue_size) {
-    // TODO: validate model and throw exception if it doesn't match
+BatchedModel::BatchedModel(nv::ICudaEngine& engine, int batch_size)
+    : BatchedModel(engine, batch_size, kDefaultBatchesInQueue * batch_size) {}
+
+BatchedModel::BatchedModel(nv::ICudaEngine& engine, int batch_size, int queue_size)
+    : m_batch_size{batch_size}, m_context{engine.createExecutionContext()}, m_tasks(queue_size) {
+    // TODO: validate model
+    auto const states_dims = engine.getTensorShape("States");
+
+    if (states_dims.nbDims != 4 || states_dims.d[0] != -1) {
+        throw std::runtime_error("Invalid input shape for \"States\" tensor!");
+    }
+
+    int const columns = states_dims.d[2];
+    int const rows = states_dims.d[3];
+    m_state_size = states_dims.d[1] * columns * rows;
+
+    auto const wall_priors_dims = engine.getTensorShape("WallPriors");
+
+    if (wall_priors_dims.nbDims != 4 || wall_priors_dims.d[0] != -1 ||
+        wall_priors_dims.d[1] != kNumWallTypes || wall_priors_dims.d[2] != columns ||
+        wall_priors_dims.d[3] != rows) {
+        throw std::runtime_error("Invalid input shape for \"WallPriors\" tensor!");
+    }
+
+    m_wall_prior_size = kNumWallTypes * columns * rows;
+
+    auto const step_priors_dims = engine.getTensorShape("StepPriors");
+
+    if (step_priors_dims.nbDims != 2 || step_priors_dims.d[0] != -1 ||
+        step_priors_dims.d[1] != kNumDirections) {
+        throw std::runtime_error("Invalid input shape for \"StepPriors\" tensor!");
+    }
+
+    auto const values_dims = engine.getTensorShape("Values");
+
+    if (values_dims.nbDims != 1 || values_dims.d[0] != -1) {
+        throw std::runtime_error("Invalid input shape for \"Values\" tensor!");
+    }
+
+    m_states = CudaBuffer<double>(m_state_size * m_batch_size);
+    m_wall_priors = CudaBuffer<double>(m_wall_prior_size * m_batch_size);
+    m_step_priors = CudaBuffer<double>(kNumDirections * m_batch_size);
+    m_values = CudaBuffer<double>(m_batch_size);
 
     m_context->setTensorAddress("States", m_states.device_ptr());
-    m_context->setTensorAddress("Priors", m_priors.device_ptr());
+    m_context->setTensorAddress("WallPriors", m_wall_priors.device_ptr());
+    m_context->setTensorAddress("StepPriors", m_step_priors.device_ptr());
     m_context->setTensorAddress("Values", m_values.device_ptr());
 
     m_worker = std::jthread{std::bind_front(&BatchedModel::run_worker, this)};
@@ -52,10 +83,6 @@ void BatchedModel::run_worker() {
     std::vector<folly::Promise<Output>> output_promises;
     output_promises.reserve(m_batch_size);
 
-    int const input_size =
-        m_board_width * m_board_height * kLayersPerHistory * m_history_length + 1;
-    int const priors_size = m_board_width * m_board_height * 2 + 4;
-
     while (true) {
         output_promises.clear();
 
@@ -67,22 +94,25 @@ void BatchedModel::run_worker() {
                 return;
             }
 
-            std::ranges::copy(task.input.state, m_states.begin() + input_size * i);
+            std::ranges::copy(task.input.state, m_states.begin() + m_state_size * i);
             output_promises.push_back(std::move(task.output));
         }
 
         m_states.to_device(m_stream);
         m_context->enqueueV3(m_stream.get());
-        m_priors.to_host(m_stream);
+        m_wall_priors.to_host(m_stream);
+        m_step_priors.to_host(m_stream);
         m_values.to_host(m_stream);
 
         // TODO: eliminate this barrier
         m_stream.synchronize();
 
         for (int i = 0; i < m_batch_size; ++i) {
-            Output output{
-                {m_priors.begin() + priors_size * i, m_priors.begin() + priors_size * (i + 1)},
-                m_values[i]};
+            Output output{{m_wall_priors.begin() + m_wall_prior_size * i,
+                           m_wall_priors.begin() + m_wall_prior_size * (i + 1)},
+                          {m_step_priors.begin() + kNumDirections * i,
+                           m_step_priors.begin() + kNumDirections * (i + 1)},
+                          m_values[i]};
 
             output_promises[i].setValue(std::move(output));
         }
