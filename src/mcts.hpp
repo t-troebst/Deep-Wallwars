@@ -17,7 +17,6 @@ struct TreeEdge {
     std::atomic<int> active_samples = 0;
     std::atomic<TreeNode*> child = nullptr;
 
-
     TreeEdge() = default;
     TreeEdge(Action action, float prior);
 
@@ -42,8 +41,13 @@ struct TreeNode {
 };
 
 struct MCTSPolicy {
-    virtual folly::SemiFuture<TreeNode*> evaluate_position(Board board, Turn turn,
-                                                           TreeNode* parent) = 0;
+    struct Evaluation {
+        float value;
+        std::vector<TreeEdge> edges;
+    };
+
+    virtual folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
+                                                            TreeNode* parent) = 0;
 
     MCTSPolicy() = default;
 
@@ -98,4 +102,7 @@ private:
     void add_root_noise();
     folly::coro::Task<> sample_worker(std::atomic<int>& remaining_iters);
     folly::coro::Task<float> sample_rec(TreeNode& root);
+
+    TreeNode* create_tree_node(Board board, Turn turn, TreeNode* parent);
+    folly::coro::Task<TreeNode*> create_tree_node_async(Board board, Turn turn, TreeNode* parent);
 };

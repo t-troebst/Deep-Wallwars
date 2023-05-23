@@ -3,8 +3,8 @@
 SimplePolicy::SimplePolicy(float move_prior, float good_move_bias, float bad_move_bias)
     : m_move_prior{move_prior}, m_good_move_bias{good_move_bias}, m_bad_move_bias{bad_move_bias} {}
 
-folly::SemiFuture<TreeNode*> SimplePolicy::evaluate_position(Board board, Turn turn,
-                                                             TreeNode* parent) {
+folly::SemiFuture<MCTSPolicy::Evaluation> SimplePolicy::evaluate_position(Board const& board,
+                                                                          Turn turn, TreeNode*) {
     std::vector<Wall> legal_walls;
     if (m_move_prior < 1) {
         legal_walls = board.legal_walls();
@@ -38,18 +38,10 @@ folly::SemiFuture<TreeNode*> SimplePolicy::evaluate_position(Board board, Turn t
         te.prior *= m_move_prior / total_prior;
     }
 
-
     float wall_prior = (1 - m_move_prior) / legal_walls.size();
     for (Wall wall : legal_walls) {
         edges.emplace_back(wall, wall_prior);
     }
 
-    TreeNode* result = new TreeNode{parent,
-                                    std::move(board),
-                                    turn,
-                                    parent ? parent->depth + 1 : 0,
-                                    TreeNode::Value(board.score_for(turn.player), 1),
-                                    std::move(edges)};
-
-    return result;
+    return Evaluation(board.score_for(turn.player), std::move(edges));
 }
