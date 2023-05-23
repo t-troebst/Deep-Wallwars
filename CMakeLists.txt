@@ -14,10 +14,11 @@ add_library(core OBJECT
     src/batched_model.cpp
     src/cuda_wrappers.cpp
     src/gamestate.cpp
-    src/model.cpp
     src/mcts.cpp
-    src/tensorrt_model.cpp
+    src/model.cpp
     src/play.cpp
+    src/simple_policy.cpp
+    src/tensorrt_model.cpp
 )
 target_link_libraries(core PUBLIC Folly::folly CUDA::cudart nvinfer nvonnxparser)
 

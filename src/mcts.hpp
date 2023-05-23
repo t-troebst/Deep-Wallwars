@@ -13,9 +13,16 @@ struct TreeNode;
 
 struct TreeEdge {
     Action action;
-    float prior;  // make everything float because of space for atomics
-    std::atomic<int> active_samples;
-    std::atomic<TreeNode*> child;
+    float prior;
+    std::atomic<int> active_samples = 0;
+    std::atomic<TreeNode*> child = nullptr;
+
+
+    TreeEdge() = default;
+    TreeEdge(Action action, float prior);
+
+    TreeEdge(TreeEdge const& other);
+    TreeEdge& operator=(TreeEdge const& other);
 };
 
 struct TreeNode {
@@ -31,19 +38,14 @@ struct TreeNode {
     std::atomic<Value> value;
     std::vector<TreeEdge> edges;
 
-    void add_sample(float weight) {
-        TreeNode::Value old_val = value;
-        TreeNode::Value new_val;
-
-        do {
-            new_val = {old_val.total_weight + weight, old_val.total_samples + 1};
-        } while (!value.compare_exchange_weak(old_val, new_val));
-    }
+    void add_sample(float weight);
 };
 
 struct MCTSPolicy {
     virtual folly::SemiFuture<TreeNode*> evaluate_position(Board board, Turn turn,
                                                            TreeNode* parent) = 0;
+
+    MCTSPolicy() = default;
 
     MCTSPolicy(MCTSPolicy const& other) = delete;
     MCTSPolicy(MCTSPolicy&& other) = delete;
@@ -71,6 +73,7 @@ public:
     Board const& current_board() const;
     float root_value() const;
     int root_samples() const;
+    int wasted_inferences() const;
 
     folly::coro::Task<float> sample(int iterations);
 

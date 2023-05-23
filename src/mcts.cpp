@@ -8,6 +8,32 @@
 
 namespace views = std::ranges::views;
 
+TreeEdge::TreeEdge(Action action, float prior) : action{action}, prior{prior} {}
+
+TreeEdge::TreeEdge(TreeEdge const& other)
+    : action{other.action},
+      prior{other.prior},
+      active_samples{other.active_samples.load()},
+      child{other.child.load()} {}
+
+TreeEdge& TreeEdge::operator=(TreeEdge const& other) {
+    action = other.action;
+    prior = other.prior;
+    active_samples = other.active_samples.load();
+    child = other.child.load();
+
+    return *this;
+}
+
+void TreeNode::add_sample(float weight) {
+    TreeNode::Value old_val = value;
+    TreeNode::Value new_val;
+
+    do {
+        new_val = {old_val.total_weight + weight, old_val.total_samples + 1};
+    } while (!value.compare_exchange_weak(old_val, new_val));
+}
+
 MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
     : MCTS{std::move(policy), std::move(board), {}} {}
 
@@ -200,4 +226,8 @@ float MCTS::root_value() const {
 
 int MCTS::root_samples() const {
     return m_current_root->value.load().total_samples;
+}
+
+int MCTS::wasted_inferences() const {
+    return m_wasted_inferences;
 }
