@@ -60,7 +60,7 @@ public:
         float puct = 3.0;
         int max_depth = 50;
         int max_parallelism = 4;
-        double direchlet_alpha = 0.2;
+        float direchlet_alpha = 0.2;
         Turn starting_turn = {Player::Red, Turn::First};
         std::uint32_t seed = 42;
     };
@@ -72,13 +72,13 @@ public:
     float root_value() const;
     int root_samples() const;
 
-    folly::coro::Task<double> sample(int iterations);
+    folly::coro::Task<float> sample(int iterations);
 
     Action commit_to_action();
-    Action commit_to_action(double temperature);
+    Action commit_to_action(float temperature);
 
     Move commit_to_move();
-    Move commit_to_move(double temperature);
+    Move commit_to_move(float temperature);
 
     void force_action(Action const& action);
     void force_move(Move const& move);
@@ -88,7 +88,7 @@ private:
     TreeNode* m_root;
     TreeNode* m_current_root;
     Options m_opts;
-    std::gamma_distribution<> m_gamma_dist;
+    std::gamma_distribution<float> m_gamma_dist;
     std::mt19937_64 m_twister;
     std::atomic<int> m_wasted_inferences = 0;
 

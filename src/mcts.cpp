@@ -21,7 +21,7 @@ MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
     add_root_noise();
 }
 
-folly::coro::Task<double> MCTS::sample(int worker_iterations) {
+folly::coro::Task<float> MCTS::sample(int worker_iterations) {
     std::atomic<int> remaining_iters = worker_iterations;
 
     auto workers = views::iota(0, m_opts.max_parallelism) |
@@ -110,7 +110,7 @@ Action MCTS::commit_to_action() {
     return te.action;
 }
 
-Action MCTS::commit_to_action(double temperature) {
+Action MCTS::commit_to_action(float temperature) {
     auto const weights =
         std::ranges::views::transform(m_current_root->edges, [&](TreeEdge const& te) {
             return te.child
@@ -136,7 +136,7 @@ Move MCTS::commit_to_move() {
     return result;
 }
 
-Move MCTS::commit_to_move(double temperature) {
+Move MCTS::commit_to_move(float temperature) {
     Move result{commit_to_action(temperature), {}};
 
     if (!m_current_root->board.winner()) {
