@@ -12,17 +12,19 @@ TensorRTModel::TensorRTModel(nv::ICudaEngine& engine, int batch_size)
     : m_context{engine.createExecutionContext()} {
     m_batch_size = batch_size;
 
-    auto const states_dims = engine.getTensorShape("States");
+    auto states_dims = engine.getTensorShape("States");
 
     if (states_dims.nbDims != 4 || states_dims.d[0] != -1) {
         throw std::runtime_error("Invalid input shape for \"States\" tensor!");
     }
 
+    states_dims.d[0] = batch_size;
+    m_context->setInputShape("States", states_dims);
     int const columns = states_dims.d[2];
     int const rows = states_dims.d[3];
     m_state_size = states_dims.d[1] * columns * rows;
 
-    auto const wall_priors_dims = engine.getTensorShape("WallPriors");
+    auto wall_priors_dims = engine.getTensorShape("WallPriors");
 
     if (wall_priors_dims.nbDims != 4 || wall_priors_dims.d[0] != -1 ||
         wall_priors_dims.d[1] != kNumWallTypes || wall_priors_dims.d[2] != columns ||
@@ -30,20 +32,28 @@ TensorRTModel::TensorRTModel(nv::ICudaEngine& engine, int batch_size)
         throw std::runtime_error("Invalid input shape for \"WallPriors\" tensor!");
     }
 
+    wall_priors_dims.d[0] = batch_size;
+    m_context->setInputShape("WallPriors", wall_priors_dims);
     m_wall_prior_size = kNumWallTypes * columns * rows;
 
-    auto const step_priors_dims = engine.getTensorShape("StepPriors");
+    auto step_priors_dims = engine.getTensorShape("StepPriors");
 
     if (step_priors_dims.nbDims != 2 || step_priors_dims.d[0] != -1 ||
         step_priors_dims.d[1] != kNumDirections) {
         throw std::runtime_error("Invalid input shape for \"StepPriors\" tensor!");
     }
 
-    auto const values_dims = engine.getTensorShape("Values");
+    step_priors_dims.d[0] = batch_size;
+    m_context->setInputShape("StepPriors", step_priors_dims);
+
+    auto values_dims = engine.getTensorShape("Values");
 
     if (values_dims.nbDims != 1 || values_dims.d[0] != -1) {
         throw std::runtime_error("Invalid input shape for \"Values\" tensor!");
     }
+
+    values_dims.d[0] = batch_size;
+    m_context->setInputShape("Values", values_dims);
 
     m_states = CudaBuffer<float>(m_state_size * m_batch_size);
     m_wall_priors = CudaBuffer<float>(m_wall_prior_size * m_batch_size);
