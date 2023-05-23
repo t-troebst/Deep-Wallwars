@@ -88,9 +88,11 @@ private:
     TreeNode* m_root;
     TreeNode* m_current_root;
     Options m_opts;
+    std::gamma_distribution<> m_gamma_dist;
     std::mt19937_64 m_twister;
     std::atomic<int> m_wasted_inferences = 0;
 
+    void add_root_noise();
     folly::coro::Task<> sample_worker(int iterations);
     folly::coro::Task<float> sample_rec(TreeNode& root);
 };

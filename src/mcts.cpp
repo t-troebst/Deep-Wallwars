@@ -12,7 +12,10 @@ MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
       m_root{m_policy->evaluate_position(board, options.starting_turn, nullptr).get()},
       m_current_root{m_root},
       m_opts{options},
-      m_twister{options.seed} {}
+      m_gamma_dist{options.direchlet_alpha, 1.0},
+      m_twister{options.seed} {
+    add_root_noise();
+}
 
 folly::coro::Task<double> MCTS::sample(int worker_iterations) {
     folly::Executor* executor = co_await folly::coro::co_current_executor;
@@ -122,6 +125,7 @@ Action MCTS::commit_to_action(double temperature) {
     TreeEdge const& te = m_current_root->edges[weight_dist(m_twister)];
 
     m_current_root = te.child;
+    add_root_noise();
     return te.action;
 }
 
@@ -163,6 +167,7 @@ void MCTS::force_action(Action const& action) {
     }
 
     m_current_root = te_it->child;
+    add_root_noise();
 }
 
 void MCTS::force_move(Move const& move) {
@@ -170,6 +175,20 @@ void MCTS::force_move(Move const& move) {
 
     if (!m_current_root->board.winner()) {
         force_action(move.second);
+    }
+}
+
+void MCTS::add_root_noise() {
+    float total = 0.0;
+
+    std::vector<float> samples(m_current_root->edges.size());
+
+    for (float& s : samples) {
+        total += s = m_gamma_dist(m_twister);
+    }
+
+    for (std::size_t i = 0; i < samples.size(); ++i) {
+        m_current_root->edges[i].prior += samples[i] / total;
     }
 }
 

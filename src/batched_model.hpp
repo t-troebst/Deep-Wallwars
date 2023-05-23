@@ -2,6 +2,7 @@
 
 #include <folly/MPMCQueue.h>
 #include <folly/futures/Future.h>
+#include <folly/experimental/coro/Task.h>
 
 #include <memory>
 #include <thread>
@@ -58,6 +59,7 @@ private:
     CudaBuffer<double> m_values;
 
     folly::MPMCQueue<InferenceTask> m_tasks;
+    std::vector<folly::Promise<Output>> m_dequeued_promises;
     std::jthread m_worker;
 
     void run_worker();
