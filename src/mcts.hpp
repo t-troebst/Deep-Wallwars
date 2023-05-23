@@ -16,7 +16,7 @@ struct NodeInfo {
     int num_samples;
     double prior;
 
-    Move move;
+    Action action;
     mutable std::unique_ptr<TreeNode> node;
 };
 
@@ -35,7 +35,7 @@ struct MCTSPolicy {
 
     virtual int depth_limit() const;
 
-    double prior(Move move) const;
+    double prior(Action action) const;
 
     virtual std::optional<double> value() const = 0;
 
@@ -55,10 +55,10 @@ public:
     double sample();
     double sample(int count);
 
-    void force_move(Move move);
+    void force_action(Action action);
 
-    Move commit_to_move();
-    Move commit_to_move(std::mt19937_64& twister, double temperature);
+    Action commit_to_action();
+    Action commit_to_action(std::mt19937_64& twister, double temperature);
 
 private:
     std::unique_ptr<MCTSPolicy> policy;

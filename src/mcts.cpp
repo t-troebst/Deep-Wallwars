@@ -16,10 +16,10 @@ int MCTSPolicy::depth_limit() const {
     return 50;
 }
 
-double MCTSPolicy::prior(Move move) const {
+double MCTSPolicy::prior(Action action) const {
     return std::visit(overload{[&](Direction dir) { return step_prior(dir); },
                                [&](Wall wall) { return wall_prior(wall); }},
-                      move);
+                      action);
 }
 
 MCTS::MCTS(Board board, Turn turn, std::unique_ptr<MCTSPolicy> policy)
@@ -54,17 +54,17 @@ double MCTS::sample(int count) {
     return total / count;
 }
 
-void MCTS::force_move(Move move) {
+void MCTS::force_action(Action action) {
     auto const child_it = ranges::find_if(current_root->children,
-                                          [&](NodeInfo const& ni) { return ni.move == move; });
+                                          [&](NodeInfo const& ni) { return ni.action == action; });
 
     if (child_it == current_root->children.end()) {
-        throw std::runtime_error("Could not find move - not legal?");
+        throw std::runtime_error("Could not find action - not legal?");
     }
 
     if (!child_it->node) {
         Board board = current_root->board;
-        board.do_move(turn.player, move);
+        board.do_action(turn.player, action);
         child_it->node = create_node(std::move(board), current_root, turn.next()).first;
     }
 
@@ -72,7 +72,7 @@ void MCTS::force_move(Move move) {
     turn = turn.next();
 }
 
-Move MCTS::commit_to_move() {
+Action MCTS::commit_to_action() {
     int max_samples = 0;
     auto max_it = current_root->children.begin();
 
@@ -83,14 +83,14 @@ Move MCTS::commit_to_move() {
         }
     }
 
-    Move const move = max_it->move;
+    Action const action = max_it->action;
     current_root = max_it->node.get();
     turn = turn.next();
 
-    return move;
+    return action;
 }
 
-Move MCTS::commit_to_move(std::mt19937_64& twister, double temperature) {
+Action MCTS::commit_to_action(std::mt19937_64& twister, double temperature) {
     auto const weights = views::transform(current_root->children, [=](NodeInfo const& ni) {
         return ni.num_samples ? std::pow(ni.num_samples, 1.0 / temperature) : 0;
     });
@@ -98,11 +98,11 @@ Move MCTS::commit_to_move(std::mt19937_64& twister, double temperature) {
     std::discrete_distribution<std::size_t> weight_dist(weights.begin(), weights.end());
     auto const it = std::next(current_root->children.begin(), weight_dist(twister));
 
-    Move const move = it->move;
+    Action const action = it->action;
     current_root = it->node.get();
     turn = turn.next();
 
-    return move;
+    return action;
 }
 
 std::pair<std::unique_ptr<TreeNode>, std::optional<double>> MCTS::create_node(
@@ -110,16 +110,16 @@ std::pair<std::unique_ptr<TreeNode>, std::optional<double>> MCTS::create_node(
     std::unique_ptr<TreeNode> node = std::make_unique<TreeNode>(std::move(board), 0, parent);
 
     policy->evaluate(*node, local_turn);
-    std::vector<Move> legal_moves = node->board.legal_moves(local_turn.player);
+    std::vector<Action> legal_actions = node->board.legal_actions(local_turn.player);
     double total_prior = 0.0;
 
-    for (Move move : legal_moves) {
-        total_prior += policy->prior(move);
+    for (Action action : legal_actions) {
+        total_prior += policy->prior(action);
     }
 
-    for (Move move : legal_moves) {
+    for (Action action : legal_actions) {
         node->children.push_back(
-            NodeInfo{0.0, 0, policy->prior(move) / total_prior, move, nullptr});
+            NodeInfo{0.0, 0, policy->prior(action) / total_prior, action, nullptr});
     }
 
     return {std::move(node), policy->value()};
@@ -137,7 +137,7 @@ double MCTS::sample_rec(TreeNode& local_root, Turn local_turn, int depth) {
     }
 
     if (local_root.children.empty()) {
-        throw std::runtime_error("No legal moves!");
+        throw std::runtime_error("No legal actions!");
     }
 
     local_root.total_samples += 1;
@@ -153,7 +153,7 @@ double MCTS::sample_rec(TreeNode& local_root, Turn local_turn, int depth) {
 
     if (!ni.node) {
         Board new_board = board;
-        new_board.do_move(local_turn.player, ni.move);
+        new_board.do_action(local_turn.player, ni.action);
         auto [new_node, value] = create_node(std::move(new_board), &local_root, next_turn);
         ni.node = std::move(new_node);
 

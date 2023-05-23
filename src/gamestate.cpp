@@ -1,45 +1,77 @@
 #include "gamestate.hpp"
 
 #include <algorithm>
+#include <array>
 #include <deque>
 #include <exception>
+#include <format>
 #include <iostream>
 #include <ranges>
+#include <sstream>
 
 #include "util.hpp"
 
 namespace ranges = std::ranges;
 namespace views = std::ranges::views;
 
-Cell Cell::step(Direction direction) const {
-    switch (direction) {
-        case Direction::Left:
-            return {x - 1, y};
-        case Direction::Right:
-            return {x + 1, y};
-        case Direction::Down:
-            return {x, y - 1};
-        case Direction::Up:
-            return {x, y + 1};
+static constexpr std::array<char, 13> kColumnLabels = {'a', 'b', 'c', 'd', 'e', 'f', 'g',
+                                                       'h', 'i', 'j', 'k', 'l', 'm'};
+static constexpr std::array<char, 10> kRowLabels = {'1', '2', '3', '4', '5',
+                                                    '6', '7', '8', '9', 'X'};
+
+Player other_player(Player player) {
+    switch (player) {
+        case Player::Red:
+            return Player::Blue;
+        case Player::Blue:
+            return Player::Red;
     }
 
-    throw std::runtime_error("Unreachable");
+    throw std::runtime_error("Unreachable: invalid player!");
 }
 
-Wall Wall::normalize() const {
-    if (direction == Direction::Left) {
-        return {{cell.x - 1, cell.y}, Direction::Right};
+Cell Cell::step(Direction direction) const {
+    switch (direction) {
+        case Direction::Right:
+            return {column, row + 1};
+        case Direction::Down:
+            return {column + 1, row};
+        case Direction::Left:
+            return {column, row - 1};
+        case Direction::Up:
+            return {column - 1, row};
     }
 
-    if (direction == Direction::Down) {
-        return {{cell.x, cell.y - 1}, Direction::Up};
+    throw std::runtime_error("Unreachable: invalid direction (step)!");
+}
+
+Wall::Wall(Cell cell, Type type) : cell{cell}, type{type} {}
+
+Wall::Wall(Cell c, Direction dir) {
+    switch (dir) {
+        case Direction::Right:
+            cell = c;
+            type = Right;
+            return;
+        case Direction::Down:
+            cell = c;
+            type = Down;
+            return;
+        case Direction::Left:
+            cell = {c.column, c.row - 1};
+            type = Right;
+            return;
+        case Direction::Up:
+            cell = {c.column - 1, c.row};
+            type = Down;
+            return;
     }
 
-    return *this;
+    throw std::runtime_error("Unreachable: invalid direction (wall)!");
 }
 
 Turn Turn::next() const {
-    if (sub_turn == First) {
+    if (action == First) {
         return Turn{player, Second};
     } else {
         return Turn{player == Player::Red ? Player::Blue : Player::Red, First};
@@ -47,29 +79,56 @@ Turn Turn::next() const {
 }
 
 Turn Turn::prev() const {
-    if (sub_turn == Second) {
+    if (action == Second) {
         return Turn{player, First};
     } else {
         return Turn{player == Player::Red ? Player::Blue : Player::Red, Second};
     }
 }
 
+std::string Move::standard_notation(Cell start) const {
+    std::stringstream out;
+    // Whew, what ugly formatting by clang-format...
+    std::visit(overload{[&](Direction dir) {
+                            Cell cell = start.step(dir);
+                            std::visit(overload{[&](Direction dir2) { out << cell.step(dir2); },
+                                                [&](Wall wall) { out << cell << ' ' << wall; }},
+                                       second);
+                        },
+                        [&](Wall wall) {
+                            std::visit(overload{[&](Direction dir) {
+                                                    out << start.step(dir) << ' ' << wall;
+                                                },
+                                                [&](Wall wall2) {
+                                                    if (wall < wall2) {
+                                                        out << wall << ' ' << wall2;
+                                                    } else {
+                                                        out << wall2 << ' ' << wall;
+                                                    }
+                                                }},
+                                       second);
+                        }},
+               first);
+
+    return out.str();
+}
+
 std::ostream& operator<<(std::ostream& out, Direction dir) {
     switch (dir) {
-        case Direction::Left:
-            out << "Left";
-            break;
         case Direction::Right:
             out << "Right";
             break;
         case Direction::Down:
             out << "Down";
             break;
+        case Direction::Left:
+            out << "Left";
+            break;
         case Direction::Up:
             out << "Up";
             break;
         default:
-            out << "Unknown Direction";
+            out << "??";
     }
 
     return out;
@@ -84,34 +143,44 @@ std::ostream& operator<<(std::ostream& out, Player player) {
             out << "Blue";
             break;
         default:
-            out << "Unknown Player";
+            out << "??";
     }
 
     return out;
 }
 
 std::ostream& operator<<(std::ostream& out, Cell cell) {
-    out << '(' << cell.x << ", " << cell.y << ')';
+    if (cell.row < 0 || cell.row >= int(kRowLabels.size()) || cell.column < 0 ||
+        cell.column >= int(kColumnLabels.size())) {
+        throw std::runtime_error(std::format(
+            "Cell coordinates ({}, {}) cannot be expressed as standard notation:", cell.column,
+            cell.row));
+    }
+
+    out << kColumnLabels[cell.column] << kRowLabels[cell.row];
+
     return out;
 }
 
 std::ostream& operator<<(std::ostream& out, Wall wall) {
-    out << '{' << wall.cell << ", " << wall.direction << '}';
+    out << wall.cell << (wall.type == Wall::Right ? '>' : 'v');
     return out;
 }
 
-std::ostream& operator<<(std::ostream& out, Move move) {
-    std::visit(overload{[&](Direction dir) { out << "Step " << dir; },
-                        [&](Wall wall) { out << "Place " << wall; }},
-               move);
+std::ostream& operator<<(std::ostream& out, Action const& action) {
+    std::visit([&](auto const& action) { out << action; }, action);
+    return out;
+}
 
+std::ostream& operator<<(std::ostream& out, Move const& move) {
+    out << move.first << ' ' << move.second;
     return out;
 }
 
 std::ostream& operator<<(std::ostream& out, Turn turn) {
     out << turn.player << ":";
 
-    switch (turn.sub_turn) {
+    switch (turn.action) {
         case Turn::First:
             out << "First";
             break;
@@ -119,130 +188,91 @@ std::ostream& operator<<(std::ostream& out, Turn turn) {
             out << "Second";
             break;
         default:
-            out << "Unknown Subturn";
+            out << "??";
     }
 
     return out;
 }
 
-std::istream& operator>>(std::istream& in, Direction& dir) {
-    std::string val;
-    in >> val;
-
-    if (val == "Left") {
-        dir = Direction::Left;
-    } else if (val == "Right") {
-        dir = Direction::Right;
-    } else if (val == "Down") {
-        dir = Direction::Down;
-    } else if (val == "Up") {
-        dir = Direction::Up;
-    } else {
-        in.fail();
-    }
-
-    return in;
-}
-
-std::istream& operator>>(std::istream& in, Player& player) {
-    std::string val;
-    in >> val;
-
-    if (val == "Red") {
-        player = Player::Red;
-    } else if (val == "Blue") {
-        player = Player::Blue;
-    } else {
-        in.fail();
-    }
-
-    return in;
-}
-
 std::istream& operator>>(std::istream& in, Cell& cell) {
-    char c;
-    // Validation who?
-    in >> c >> cell.x >> c >> cell.y >> c;
+    char column_label;
+    char row_label;
+    in >> column_label >> row_label;
+
+    cell.column = column_label - 'a';
+    cell.row = row_label == 'X' ? 9 : row_label - '0';
+
+    // TODO: validate
+
     return in;
 }
 
 std::istream& operator>>(std::istream& in, Wall& wall) {
-    char c;
-    in >> c >> wall.cell >> c >> wall.direction >> c;
-    return in;
-}
+    char dir;
+    in >> wall.cell >> dir;
 
-std::istream& operator>>(std::istream& in, Move& move) {
-    std::string type;
-    in >> type;
-
-    if (type == "Step") {
-        Direction dir;
-        in >> dir;
-        move = dir;
-    } else if (type == "Place") {
-        Wall wall;
-        in >> wall;
-        move = wall.normalize();
-    } else {
-        in.fail();
+    switch (dir) {
+        case 'v':
+            wall.type = Wall::Down;
+            break;
+        case '>':
+            wall.type = Wall::Right;
+            break;
+        default:
+            throw std::runtime_error("Invalid wall direction!");
     }
 
     return in;
 }
 
-std::istream& operator>>(std::istream& in, Turn& turn) {
-    char c;
-    std::string sub_turn;
-    in >> turn.player >> c >> sub_turn;
-
-    if (sub_turn == "First") {
-        turn.sub_turn = Turn::First;
-    } else if (sub_turn == "Second") {
-        turn.sub_turn = Turn::Second;
-    } else {
-        in.fail();
-    }
-
-    return in;
-}
-
-Board::Board(int width, int height, Cell red_start, Cell red_goal, Cell blue_start, Cell blue_goal)
+Board::Board(int columns, int rows, Cell red_start, Cell red_goal, Cell blue_start, Cell blue_goal)
     : m_red{red_start, red_goal},
       m_blue{blue_start, blue_goal},
-      m_width{width},
-      m_height{height},
-      m_board(width * height) {
+      m_columns{columns},
+      m_rows{rows},
+      m_board(columns * rows) {
     state_at(red_start).has_red_player = true;
     state_at(blue_start).has_blue_player = true;
     state_at(red_goal).has_red_goal = true;
     state_at(blue_goal).has_blue_goal = true;
 }
 
+Board::Board(int columns, int rows, Cell red_start, Cell red_goal)
+    : Board{columns,
+            rows,
+            red_start,
+            red_goal,
+            {red_start.column, rows - 1 - red_start.row},
+            {red_goal.column, rows - 1 - red_goal.row}} {}
+
+Board::Board(int columns, int rows) : Board{columns, rows, {0, 0}, {columns - 1, rows - 1}} {}
+
 bool Board::is_blocked(Wall wall) const {
-    wall = wall.normalize();
-
-    if (wall.cell.x < 0 || wall.cell.y < 0 || wall.cell.x >= m_width || wall.cell.y >= m_height) {
+    if (wall.cell.column < 0 || wall.cell.row < 0 || wall.cell.column >= m_columns ||
+        wall.cell.row >= m_rows) {
         return true;
     }
 
-    if (wall.cell.x == m_width - 1 && wall.direction == Direction::Right) {
-        return true;
-    }
+    if (wall.type == Wall::Down) {
+        if (wall.cell.column == m_columns - 1) {
+            return true;
+        }
 
-    if (wall.cell.y == m_height - 1 && wall.direction == Direction::Up) {
-        return true;
-    }
+        State const state = state_at(wall.cell);
 
-    State const state = state_at(wall.cell);
+        if (state.has_red_down_wall || state.has_blue_down_wall) {
+            return true;
+        }
+    } else {
+        if (wall.cell.row == m_rows - 1) {
+            return true;
+        }
 
-    if (wall.direction == Direction::Right &&
-        (state.has_red_right_wall || state.has_blue_right_wall)) {
-        return true;
-    }
+        State const state = state_at(wall.cell);
 
-    if (wall.direction == Direction::Up && (state.has_red_up_wall || state.has_blue_up_wall)) {
-        return true;
+        if (state.has_red_right_wall || state.has_blue_right_wall) {
+            return true;
+        }
     }
 
     return false;
@@ -250,19 +280,17 @@ bool Board::is_blocked(Wall wall) const {
 
 std::vector<Direction> Board::legal_directions(Player player) const {
     Cell const pos = player == Player::Red ? m_red.position : m_blue.position;
-    auto dirs = directions | views::filter([&](Direction dir) { return !is_blocked({pos, dir}); });
+    auto dirs = kDirections | views::filter([&](Direction dir) { return !is_blocked({pos, dir}); });
     return {dirs.begin(), dirs.end()};
 }
 
 std::pair<bool, int> Board::find_bridges(Cell start, Cell target, int level,
                                          std::vector<int>& levels, std::set<Wall>& bridges) const {
-    auto const level_at = [&](Cell square) -> int& { return levels[square.x * m_height + square.y]; };
-
-    level_at(start) = level;
+    levels[index_from_cell(start)] = level;
     bool target_found = start == target;
     int min_level = level;
 
-    for (Direction dir : directions) {
+    for (Direction dir : kDirections) {
         Wall const wall{start, dir};
 
         if (is_blocked(wall)) {
@@ -270,7 +298,7 @@ std::pair<bool, int> Board::find_bridges(Cell start, Cell target, int level,
         }
 
         Cell const neighbor = start.step(dir);
-        int const neighbor_level = level_at(neighbor);
+        int const neighbor_level = levels[index_from_cell(neighbor)];
 
         if (neighbor_level == level - 1) {
             continue;
@@ -283,7 +311,7 @@ std::pair<bool, int> Board::find_bridges(Cell start, Cell target, int level,
             min_level = std::min(min_level, sub_level);
 
             if (sub_found && sub_level > level) {
-                bridges.insert(wall.normalize());
+                bridges.insert(wall);
             }
         } else {
             min_level = std::min(min_level, neighbor_level);
@@ -295,7 +323,7 @@ std::pair<bool, int> Board::find_bridges(Cell start, Cell target, int level,
 
 std::vector<Wall> Board::legal_walls() const {
     std::set<Wall> illegal_walls;
-    std::vector<int> levels(m_width * m_height, -1);
+    std::vector<int> levels(m_columns * m_rows, -1);
 
     find_bridges(m_blue.position, m_blue.goal, 1, levels, illegal_walls);
     ranges::fill(levels, -1);
@@ -303,10 +331,10 @@ std::vector<Wall> Board::legal_walls() const {
 
     std::vector<Wall> result;
 
-    for (int x = 0; x < m_width; ++x) {
-        for (int y = 0; y < m_height; ++y) {
-            for (Direction const dir : {Direction::Right, Direction::Up}) {
-                Wall const wall{{x, y}, dir};
+    for (int column = 0; column < m_columns; ++column) {
+        for (int row = 0; row < m_rows; ++row) {
+            for (Wall::Type type : {Wall::Down, Wall::Right}) {
+                Wall const wall{{column, row}, type};
 
                 if (!is_blocked(wall) && !illegal_walls.contains(wall)) {
                     result.push_back(wall);
@@ -318,12 +346,12 @@ std::vector<Wall> Board::legal_walls() const {
     return result;
 }
 
-std::vector<Move> Board::legal_moves(Player player) const {
+std::vector<Action> Board::legal_actions(Player player) const {
     // Inefficient but whatever for now
     auto const dirs = legal_directions(player);
     auto const walls = legal_walls();
 
-    std::vector<Move> result;
+    std::vector<Action> result;
     result.reserve(dirs.size() + walls.size());
     result.insert(result.end(), dirs.begin(), dirs.end());
     result.insert(result.end(), walls.begin(), walls.end());
@@ -335,7 +363,6 @@ void Board::take_step(Player player, Direction dir) {
     Cell& position = player == Player::Red ? m_red.position : m_blue.position;
 
     if (is_blocked({position, dir})) {
-        std::cout << position.x << ", " << position.y << ": " << int(dir) << '\n';
         throw std::runtime_error("Trying to move through blocked wall!");
     }
 
@@ -349,22 +376,25 @@ void Board::take_step(Player player, Direction dir) {
 }
 
 void Board::place_wall(Player player, Wall wall) {
-    wall = wall.normalize();
     State& state = state_at(wall.cell);
 
+    if (is_blocked(wall)) {
+        throw std::runtime_error("Trying to place on top of existing wall!");
+    }
+
+    // TODO: should at least add a debug check for disconnecting players from their goals?
+
     if (player == Player::Red) {
-        (wall.direction == Direction::Right ? state.has_red_right_wall : state.has_red_up_wall) =
-            true;
+        (wall.type == Wall::Right ? state.has_red_right_wall : state.has_red_down_wall) = true;
     } else {
-        (wall.direction == Direction::Right ? state.has_blue_right_wall : state.has_blue_up_wall) =
-            true;
+        (wall.type == Wall::Right ? state.has_blue_right_wall : state.has_blue_down_wall) = true;
     }
 }
 
-void Board::do_move(Player player, Move move) {
+void Board::do_action(Player player, Action action) {
     std::visit(overload{[&](Direction dir) { take_step(player, dir); },
                         [&](Wall wall) { place_wall(player, wall); }},
-               move);
+               action);
 }
 
 std::optional<Player> Board::winner() const {
@@ -380,10 +410,8 @@ std::optional<Player> Board::winner() const {
 }
 
 int Board::distance(Cell start, Cell target) const {
-    std::vector<bool> visited(m_width * m_height, false);
+    std::vector<bool> visited(m_columns * m_rows, false);
     std::deque<std::pair<Cell, int>> queue = {{start, 0}};
-
-    auto const visited_at = [&](Cell cell) { return visited[cell.x + cell.y * m_width]; };
 
     while (!queue.empty()) {
         auto const [top, dist] = queue.front();
@@ -393,22 +421,30 @@ int Board::distance(Cell start, Cell target) const {
             return dist;
         }
 
-        visited_at(top) = true;
+        visited[index_from_cell(top)] = true;
 
-        for (Direction dir : directions) {
+        for (Direction dir : kDirections) {
             if (is_blocked({top, dir})) {
                 continue;
             }
 
             Cell const neighbor = top.step(dir);
 
-            if (!visited_at(neighbor)) {
+            if (!visited[index_from_cell(neighbor)]) {
                 queue.push_back({neighbor, dist + 1});
             }
         }
     }
 
     return -1;
+}
+
+Cell Board::cell_at_index(int i) const {
+    return {i / m_rows, i % m_rows};
+}
+
+int Board::index_from_cell(Cell cell) const {
+    return cell.column * m_rows + cell.row;
 }
 
 Cell Board::position(Player player) const {
@@ -419,10 +455,18 @@ Cell Board::goal(Player player) const {
     return player == Player::Red ? m_red.goal : m_blue.goal;
 }
 
+int Board::columns() const {
+    return m_columns;
+}
+
+int Board::rows() const {
+    return m_rows;
+}
+
 Board::State& Board::state_at(Cell cell) {
-    return m_board[cell.x + cell.y * m_width];
+    return m_board[index_from_cell(cell)];
 }
 
 Board::State Board::state_at(Cell cell) const {
-    return m_board[cell.x + cell.y * m_width];
+    return m_board[index_from_cell(cell)];
 }

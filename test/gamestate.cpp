@@ -6,22 +6,30 @@
 #include <ranges>
 #include <sstream>
 
+TEST_CASE("Legal walls") {
+    Board tiny{2, 2};
+
+    REQUIRE(tiny.legal_walls().size() == 4);
+    tiny.place_wall(Player::Blue, {{0, 0}, Direction::Right});
+    REQUIRE(tiny.legal_walls().size() == 0);
+}
+
 TEST_CASE("Empty board") {
-    Board board{3, 3, {0, 0}, {2, 2}, {2, 0}, {0, 2}};
+    Board board{3, 3};
 
     REQUIRE(board.position(Player::Red) == Cell{0, 0});
-    REQUIRE(board.position(Player::Blue) == Cell{2, 0});
+    REQUIRE(board.position(Player::Blue) == Cell{0, 2});
 
     REQUIRE(board.goal(Player::Red) == Cell{2, 2});
-    REQUIRE(board.goal(Player::Blue) == Cell{0, 2});
+    REQUIRE(board.goal(Player::Blue) == Cell{2, 0});
 
     REQUIRE(board.legal_directions(Player::Red).size() == 2);
     REQUIRE(board.legal_directions(Player::Blue).size() == 2);
 
     REQUIRE(board.legal_walls().size() == 12);
 
-    REQUIRE(board.legal_moves(Player::Red).size() == 14);
-    REQUIRE(board.legal_moves(Player::Blue).size() == 14);
+    REQUIRE(board.legal_actions(Player::Red).size() == 14);
+    REQUIRE(board.legal_actions(Player::Blue).size() == 14);
 
     REQUIRE_FALSE(board.winner());
 }
@@ -31,9 +39,9 @@ TEST_CASE("Advance to win") {
 
     board.take_step(Player::Red, Direction::Right);
     REQUIRE_FALSE(board.winner());
-    board.take_step(Player::Red, Direction::Up);
+    board.take_step(Player::Red, Direction::Down);
     REQUIRE_FALSE(board.winner());
-    board.take_step(Player::Red, Direction::Up);
+    board.take_step(Player::Red, Direction::Down);
     REQUIRE_FALSE(board.winner());
     board.take_step(Player::Red, Direction::Right);
     REQUIRE(board.position(Player::Red) == board.goal(Player::Red));
@@ -55,24 +63,13 @@ TEST_CASE("Distance") {
 }
 
 TEST_CASE("Can't disconnect players from goals") {
-    Board board{3, 3, {0, 0}, {2, 2}, {2, 0}, {0, 2}};
+    Board board{3, 3};
     board.place_wall(Player::Blue, {{0, 0}, Direction::Right});
     REQUIRE(board.legal_walls().size() == 10);
-    // board.advance(Player::Red, Place{Wall{0, 3}});
-    // REQUIRE(board.legal_walls().size() == 7);
-    // board.advance(Player::Red, Place{Wall{1, 0}});
-    // REQUIRE(board.legal_walls().size() == 5);
+
+    // TODO
 }
 
 TEST_CASE("Input / Output") {
-    Direction dir;
-    std::stringstream dir_str{"Right"};
-    dir_str >> dir;
-    REQUIRE(dir == Direction::Right);
-
-    Wall wall;
-    std::stringstream wall_str{"{ (3, 4), Right }"};
-    wall_str >> wall;
-    REQUIRE(wall.cell == Cell{3, 4});
-    REQUIRE(wall.direction == Direction::Right);
+    // TODO
 }

@@ -8,7 +8,7 @@
 #include "cuda_wrappers.hpp"
 
 template <typename T>
-CudaBuffer<T>::CudaBuffer(std::size_t size) : m_size{size}, m_host_ptr{new T[size]} {
+CudaBuffer<T>::CudaBuffer(std::size_t size) : m_host_ptr{new T[size]}, m_size{size} {
     cudaMalloc(&m_device_ptr, size);
 }
 
