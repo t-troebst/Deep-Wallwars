@@ -8,6 +8,8 @@
 
 namespace views = std::ranges::views;
 
+constexpr float kWastedInferencePenalty = 1000.0;
+
 TreeEdge::TreeEdge(Action action, float prior) : action{action}, prior{prior} {}
 
 TreeEdge::TreeEdge(TreeEdge const& other)
@@ -74,29 +76,30 @@ folly::coro::Task<float> MCTS::sample_rec(TreeNode& root) {
         co_return root.board.score_for(root.turn.player);
     }
 
-    TreeEdge& te = *std::ranges::max_element(root.edges, {}, [&](TreeEdge const& te) -> float {
+    TreeEdge& te = *std::ranges::max_element(root.edges, {}, [&](TreeEdge const& te) {
         TreeNode::Value root_val = root.value;
         TreeNode* child = te.child;
+
+        float const p_root = m_opts.puct * std::sqrt(float(root_val.total_samples));
 
         if (!child) {
             int const active_samples = te.active_samples;
 
             if (active_samples) {
                 // Sampling here would be a total waste so make this expensive
-                return -1000 * active_samples;
+                return -kWastedInferencePenalty * active_samples;
             }
 
-            return m_opts.puct * te.prior * std::sqrt(root_val.total_samples);
+            return te.prior * p_root;
         }
 
         TreeNode::Value child_val = child->value;
         int const active_samples = te.active_samples;
-        child_val.total_weight -= active_samples;
+        child_val.total_weight -= m_opts.active_sample_penalty * active_samples;
         child_val.total_samples += active_samples;
 
         return child_val.total_weight / child_val.total_samples +
-               m_opts.puct * te.prior * std::sqrt(root_val.total_samples) /
-                   (1 + child_val.total_samples);
+               te.prior * p_root / (1 + child_val.total_samples);
     });
 
     ++te.active_samples;
@@ -225,7 +228,8 @@ TreeNode* MCTS::create_tree_node(Board board, Turn turn, TreeNode* parent) {
     return result;
 }
 
-folly::coro::Task<TreeNode*> MCTS::create_tree_node_async(Board board, Turn turn, TreeNode* parent) {
+folly::coro::Task<TreeNode*> MCTS::create_tree_node_async(Board board, Turn turn,
+                                                          TreeNode* parent) {
     MCTSPolicy::Evaluation eval = co_await m_policy->evaluate_position(board, turn, parent);
     TreeNode* result = new TreeNode{parent,
                                     std::move(board),

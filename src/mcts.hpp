@@ -67,6 +67,7 @@ public:
         int max_depth = 50;
         int max_parallelism = 4;
         float direchlet_alpha = 0.2;
+        float active_sample_penalty = 1.0;
         Turn starting_turn = {Player::Red, Turn::First};
         std::uint32_t seed = 42;
     };
