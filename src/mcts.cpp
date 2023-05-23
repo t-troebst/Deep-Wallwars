@@ -1,179 +1,185 @@
 #include "mcts.hpp"
 
 #include <algorithm>
-#include <cmath>
-#include <functional>
-#include <iostream>
 #include <random>
 #include <ranges>
 
-#include "util.hpp"
+MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
+    : MCTS{std::move(policy), std::move(board), {}} {}
 
-namespace ranges = std::ranges;
-namespace views = std::ranges::views;
+MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
+    : m_policy{std::move(policy)},
+      m_root{m_policy->initialize(board, options.starting_turn, nullptr)},
+      m_current_root{m_root},
+      m_opts{options},
+      m_twister{options.seed} {}
 
-int MCTSPolicy::depth_limit() const {
-    return 50;
-}
+folly::coro::Task<double> MCTS::sample(int worker_iterations) {
+    folly::Executor* executor = co_await folly::coro::co_current_executor;
 
-double MCTSPolicy::prior(Action action) const {
-    return std::visit(overload{[&](Direction dir) { return step_prior(dir); },
-                               [&](Wall wall) { return wall_prior(wall); }},
-                      action);
-}
+    std::vector<folly::SemiFuture<folly::Unit>> workers;
+    workers.reserve(m_opts.workers);
 
-MCTS::MCTS(Board board, Turn turn, std::unique_ptr<MCTSPolicy> policy)
-    : policy{std::move(policy)}, root{nullptr}, turn{turn} {
-    root = create_node(std::move(board), nullptr, turn).first;
-    current_root = root.get();
-}
-
-Board const& MCTS::current_board() const {
-    return current_root->board;
-}
-
-Turn MCTS::current_turn() const {
-    return turn;
-}
-
-TreeNode const& MCTS::current_node() const {
-    return *current_root;
-}
-
-double MCTS::sample() {
-    return sample_rec(*current_root, turn, 0);
-}
-
-double MCTS::sample(int count) {
-    double total = 0.0;
-
-    for (int i = 0; i < count; ++i) {
-        total += sample();
+    for (int i = 0; i < m_opts.workers; ++i) {
+        workers.push_back(sample_worker(worker_iterations).scheduleOn(executor).start());
     }
 
-    return total / count;
+    for (int i = 0; i < m_opts.workers; ++i) {
+        co_await std::move(workers[i]);
+    }
+
+    TreeNode::Value val = m_root->value;
+
+    co_return val.total_weight / val.total_samples;
 }
 
-void MCTS::force_action(Action action) {
-    auto const child_it = ranges::find_if(current_root->children,
-                                          [&](NodeInfo const& ni) { return ni.action == action; });
+folly::coro::Task<> MCTS::sample_worker(int iterations) {
+    for (int i = 0; i < iterations; ++i) {
+        co_await sample_rec(*m_current_root);
+    }
+}
 
-    if (child_it == current_root->children.end()) {
-        throw std::runtime_error("Could not find action - not legal?");
+folly::coro::Task<float> MCTS::sample_rec(TreeNode& root) {
+    if (auto winner = root.board.winner(); winner) {
+        co_return *winner == root.turn.player ? 1 : -1;
     }
 
-    if (!child_it->node) {
-        Board board = current_root->board;
-        board.do_action(turn.player, action);
-        child_it->node = create_node(std::move(board), current_root, turn.next()).first;
+    if (root.depth >= m_opts.max_depth) {
+        co_return root.board.score_for(root.turn.player);
     }
 
-    current_root = child_it->node.get();
-    turn = turn.next();
+    TreeEdge& te = *std::ranges::max_element(root.edges, {}, [&](TreeEdge const& te) -> float {
+        TreeNode::Value root_val = root.value;
+        TreeNode* child = te.child;
+
+        if (!child) {
+            int const active_samples = te.active_samples;
+
+            if (active_samples) {
+                // Sampling here would be a total waste so make this expensive
+                return -1000 * active_samples;
+            }
+
+            return m_opts.puct * te.prior * std::sqrt(root_val.total_samples);
+        }
+
+        TreeNode::Value child_val = child->value;
+        int const active_samples = te.active_samples;
+        child_val.total_weight -= active_samples;
+        child_val.total_samples += active_samples;
+
+        return child_val.total_weight / child_val.total_samples +
+               m_opts.puct * te.prior * std::sqrt(root_val.total_samples) /
+                   (1 + child_val.total_samples);
+    });
+
+    ++te.active_samples;
+    float value;
+
+    if (te.child == nullptr) {
+        Board next_board{root.board};
+        next_board.do_action(root.turn.player, te.action);
+
+        TreeNode* new_node =
+            co_await m_policy->evaluate_position(std::move(next_board), root.turn.next(), &root);
+        TreeNode* expected;
+
+        value = new_node->value.load().total_weight;
+
+        if (!te.child.compare_exchange_strong(expected, new_node)) {
+            ++m_wasted_inferences;
+            delete new_node;
+        }
+    } else {
+        value = co_await sample_rec(*te.child);
+    }
+
+    --te.active_samples;
+    root.add_sample(value);
+
+    co_return value;
 }
 
 Action MCTS::commit_to_action() {
-    int max_samples = 0;
-    auto max_it = current_root->children.begin();
-
-    for (auto it = current_root->children.begin(); it != current_root->children.end(); ++it) {
-        if (it->num_samples > max_samples) {
-            max_samples = it->num_samples;
-            max_it = it;
-        }
-    }
-
-    Action const action = max_it->action;
-    current_root = max_it->node.get();
-    turn = turn.next();
-
-    return action;
-}
-
-Action MCTS::commit_to_action(std::mt19937_64& twister, double temperature) {
-    auto const weights = views::transform(current_root->children, [=](NodeInfo const& ni) {
-        return ni.num_samples ? std::pow(ni.num_samples, 1.0 / temperature) : 0;
-    });
-
-    std::discrete_distribution<std::size_t> weight_dist(weights.begin(), weights.end());
-    auto const it = std::next(current_root->children.begin(), weight_dist(twister));
-
-    Action const action = it->action;
-    current_root = it->node.get();
-    turn = turn.next();
-
-    return action;
-}
-
-std::pair<std::unique_ptr<TreeNode>, std::optional<double>> MCTS::create_node(
-    Board&& board, TreeNode* parent, Turn local_turn) const {
-    std::unique_ptr<TreeNode> node = std::make_unique<TreeNode>(std::move(board), 0, parent);
-
-    policy->evaluate(*node, local_turn);
-    std::vector<Action> legal_actions = node->board.legal_actions(local_turn.player);
-    double total_prior = 0.0;
-
-    for (Action action : legal_actions) {
-        total_prior += policy->prior(action);
-    }
-
-    for (Action action : legal_actions) {
-        node->children.push_back(
-            NodeInfo{0.0, 0, policy->prior(action) / total_prior, action, nullptr});
-    }
-
-    return {std::move(node), policy->value()};
-}
-
-double MCTS::sample_rec(TreeNode& local_root, Turn local_turn, int depth) {
-    Board const& board = local_root.board;
-
-    if (auto winner = board.winner(); winner) {
-        return *winner == local_turn.player ? 1 : -1;
-    }
-
-    if (depth >= policy->depth_limit()) {
-        return 0.0;  // TODO: or -1?
-    }
-
-    if (local_root.children.empty()) {
-        throw std::runtime_error("No legal actions!");
-    }
-
-    local_root.total_samples += 1;
-
-    NodeInfo& ni =
-        *ranges::max_element(local_root.children, ranges::less(), [&](NodeInfo const& ni) {
-            double prior = &local_root == current_root ? ni.prior + 0.05 : ni.prior;
-            return ni.cumulative_weight / std::max(ni.num_samples, 1) +
-                   prior * std::sqrt(local_root.total_samples) / (1 + ni.num_samples);
+    TreeEdge const& te =
+        *std::ranges::max_element(m_current_root->edges, {}, [&](TreeEdge const& te) {
+            return te.child ? te.child.load()->value.load().total_samples : 0;
         });
 
-    Turn const next_turn = local_turn.next();
+    m_current_root = te.child;
+    return te.action;
+}
 
-    if (!ni.node) {
-        Board new_board = board;
-        new_board.do_action(local_turn.player, ni.action);
-        auto [new_node, value] = create_node(std::move(new_board), &local_root, next_turn);
-        ni.node = std::move(new_node);
+Action MCTS::commit_to_action(double temperature) {
+    auto const weights =
+        std::ranges::views::transform(m_current_root->edges, [&](TreeEdge const& te) {
+            return te.child
+                       ? std::pow(te.child.load()->value.load().total_samples, 1.0 / temperature)
+                       : 0;
+        });
 
-        if (value) {
-            ni.num_samples += 1;
-            ni.cumulative_weight += *value;
-            return *value;
-        }
-    } else {
-        // Depth limit only applies to new parts of the tree.
-        depth = 0;
+    std::discrete_distribution<std::size_t> weight_dist(weights.begin(), weights.end());
+    TreeEdge const& te = m_current_root->edges[weight_dist(m_twister)];
+
+    m_current_root = te.child;
+    return te.action;
+}
+
+Move MCTS::commit_to_move() {
+    Move result{commit_to_action(), {}};
+
+    if (!m_current_root->board.winner()) {
+        result.second = commit_to_action();
     }
 
-    double value = sample_rec(*ni.node, next_turn, depth + 1);
-    if (next_turn.player != local_turn.player) {
-        value *= -1;
+    return result;
+}
+
+Move MCTS::commit_to_move(double temperature) {
+    Move result{commit_to_action(temperature), {}};
+
+    if (!m_current_root->board.winner()) {
+        result.second = commit_to_action(temperature);
     }
 
-    ni.num_samples += 1;
-    ni.cumulative_weight += value;
+    return result;
+}
 
-    return value;
+void MCTS::force_action(Action const& action) {
+    auto const te_it = std::ranges::find_if(
+        m_current_root->edges, [&](TreeEdge const& te) { return te.action == action; });
+
+    if (te_it == m_current_root->edges.end()) {
+        throw std::runtime_error("Could not find action - not legal?");
+    }
+
+    if (!te_it->child) {
+        Board board = m_current_root->board;
+        board.do_action(m_current_root->turn.player, action);
+        te_it->child =
+            m_policy->initialize(std::move(board), m_current_root->turn.next(), m_current_root);
+    }
+
+    m_current_root = te_it->child;
+}
+
+void MCTS::force_move(Move const& move) {
+    force_action(move.first);
+
+    if (!m_current_root->board.winner()) {
+        force_action(move.second);
+    }
+}
+
+Board const& MCTS::current_board() const {
+    return m_current_root->board;
+}
+
+float MCTS::root_value() const {
+    TreeNode::Value val = m_current_root->value;
+    return val.total_weight / val.total_samples;
+}
+
+int MCTS::root_samples() const {
+    return m_current_root->value.load().total_samples;
 }

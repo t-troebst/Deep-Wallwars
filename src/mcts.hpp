@@ -1,75 +1,97 @@
 #pragma once
 
-#include <compare>
+#include <folly/experimental/coro/Task.h>
+#include <folly/futures/Future.h>
+
+#include <atomic>
 #include <memory>
-#include <optional>
 #include <random>
-#include <set>
-#include <utility>
 
 #include "gamestate.hpp"
 
 struct TreeNode;
 
-struct NodeInfo {
-    double cumulative_weight;
-    int num_samples;
-    double prior;
-
+struct TreeEdge {
     Action action;
-    mutable std::unique_ptr<TreeNode> node;
+    float prior;  // make everything float because of space for atomics
+    std::atomic<int> active_samples;
+    std::atomic<TreeNode*> child;
 };
 
 struct TreeNode {
+    struct Value {
+        float total_weight;
+        int total_samples;
+    };
+
+    TreeNode* parent;
     Board board;
-    int total_samples;
-    TreeNode const* parent;  // useful if you want the board history
-    std::vector<NodeInfo> children;
+    Turn turn;
+    int depth;
+    std::atomic<Value> value;
+    std::vector<TreeEdge> edges;
+
+    void add_sample(float weight) {
+        TreeNode::Value old_val = value;
+        TreeNode::Value new_val;
+
+        do {
+            new_val = {old_val.total_weight + weight, old_val.total_samples + 1};
+        } while (!value.compare_exchange_weak(old_val, new_val));
+    }
 };
 
 struct MCTSPolicy {
-    virtual void evaluate(TreeNode const& node, Turn turn) = 0;
+    virtual TreeNode* initialize(Board board, Turn turn, TreeNode* parent) = 0;
+    virtual folly::SemiFuture<TreeNode*> evaluate_position(Board board, Turn turn,
+                                                           TreeNode* parent) = 0;
 
-    virtual double step_prior(Direction dir) const = 0;
-    virtual double wall_prior(Wall wall) const = 0;
+    MCTSPolicy(MCTSPolicy const& other) = delete;
+    MCTSPolicy(MCTSPolicy&& other) = delete;
 
-    virtual int depth_limit() const;
-
-    double prior(Action action) const;
-
-    virtual std::optional<double> value() const = 0;
-
-    virtual std::unique_ptr<MCTSPolicy> clone() const = 0;
+    MCTSPolicy& operator=(MCTSPolicy const& other) = delete;
+    MCTSPolicy& operator=(MCTSPolicy&& other) = delete;
 
     virtual ~MCTSPolicy() = default;
 };
 
 class MCTS {
 public:
-    MCTS(Board board, Turn turn, std::unique_ptr<MCTSPolicy> policy);
+    struct Options {
+        float puct = 3.0;
+        int max_depth = 50;
+        int workers = 4;
+        double direchlet_alpha = 0.2;
+        Turn starting_turn = {Player::Red, Turn::First};
+        std::uint32_t seed = 42;
+    };
+
+    MCTS(std::shared_ptr<MCTSPolicy> policy, Board board);
+    MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options opts);
 
     Board const& current_board() const;
-    Turn current_turn() const;
-    TreeNode const& current_node() const;
+    float root_value() const;
+    int root_samples() const;
 
-    double sample();
-    double sample(int count);
-
-    void force_action(Action action);
+    folly::coro::Task<double> sample(int worker_iterations);
 
     Action commit_to_action();
-    Action commit_to_action(std::mt19937_64& twister, double temperature);
+    Action commit_to_action(double temperature);
+
+    Move commit_to_move();
+    Move commit_to_move(double temperature);
+
+    void force_action(Action const& action);
+    void force_move(Move const& move);
 
 private:
-    std::unique_ptr<MCTSPolicy> policy;
+    std::shared_ptr<MCTSPolicy> m_policy;
+    TreeNode* m_root;
+    TreeNode* m_current_root;
+    Options m_opts;
+    std::mt19937_64 m_twister;
+    std::atomic<int> m_wasted_inferences = 0;
 
-    std::unique_ptr<TreeNode> root;
-    TreeNode* current_root;
-    Turn turn;
-
-    std::pair<std::unique_ptr<TreeNode>, std::optional<double>> create_node(Board&& board,
-                                                                            TreeNode* parent,
-                                                                            Turn local_turn) const;
-
-    double sample_rec(TreeNode& local_root, Turn local_turn, int depth);
+    folly::coro::Task<> sample_worker(int iterations);
+    folly::coro::Task<float> sample_rec(TreeNode& root);
 };

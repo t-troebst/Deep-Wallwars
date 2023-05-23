@@ -409,6 +409,23 @@ std::optional<Player> Board::winner() const {
     return {};
 }
 
+double Board::score_for(Player player) const {
+    double dist = distance(position(player), goal(player));
+
+    if (dist == 0) {
+        return 1.0;
+    }
+
+    Player opponent = other_player(player);
+    double opponent_dist = distance(position(opponent), goal(opponent));
+
+    if (opponent_dist == 0) {
+        return -1.0;
+    }
+
+    return dist < opponent_dist ? 1.0 - dist / opponent_dist : -1.0 + opponent_dist / dist;
+}
+
 int Board::distance(Cell start, Cell target) const {
     std::vector<bool> visited(m_columns * m_rows, false);
     std::deque<std::pair<Cell, int>> queue = {{start, 0}};

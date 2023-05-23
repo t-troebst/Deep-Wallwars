@@ -88,6 +88,7 @@ public:
     void do_action(Player player, Action action);
 
     std::optional<Player> winner() const;
+    double score_for(Player player) const;
 
     Cell position(Player player) const;
     Cell goal(Player player) const;
