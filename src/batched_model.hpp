@@ -18,13 +18,13 @@ class IExecutionContext;
 class BatchedModel {
 public:
     struct Input {
-        std::vector<double> state;
+        std::vector<float> state;
     };
 
     struct Output {
-        std::vector<double> wall_prior;
-        std::vector<double> step_prior;
-        double value;
+        std::vector<float> wall_prior;
+        std::vector<float> step_prior;
+        float value;
     };
 
     BatchedModel(nvinfer1::ICudaEngine& engine, int batch_size);
@@ -53,10 +53,10 @@ private:
     std::unique_ptr<nvinfer1::IExecutionContext> m_context;
 
     CudaStream m_stream;
-    CudaBuffer<double> m_states;
-    CudaBuffer<double> m_wall_priors;
-    CudaBuffer<double> m_step_priors;
-    CudaBuffer<double> m_values;
+    CudaBuffer<float> m_states;
+    CudaBuffer<float> m_wall_priors;
+    CudaBuffer<float> m_step_priors;
+    CudaBuffer<float> m_values;
 
     folly::MPMCQueue<InferenceTask> m_tasks;
     std::vector<folly::Promise<Output>> m_dequeued_promises;

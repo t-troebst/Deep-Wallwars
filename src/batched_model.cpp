@@ -52,10 +52,10 @@ BatchedModel::BatchedModel(nv::ICudaEngine& engine, int batch_size, int queue_si
         throw std::runtime_error("Invalid input shape for \"Values\" tensor!");
     }
 
-    m_states = CudaBuffer<double>(m_state_size * m_batch_size);
-    m_wall_priors = CudaBuffer<double>(m_wall_prior_size * m_batch_size);
-    m_step_priors = CudaBuffer<double>(kNumDirections * m_batch_size);
-    m_values = CudaBuffer<double>(m_batch_size);
+    m_states = CudaBuffer<float>(m_state_size * m_batch_size);
+    m_wall_priors = CudaBuffer<float>(m_wall_prior_size * m_batch_size);
+    m_step_priors = CudaBuffer<float>(kNumDirections * m_batch_size);
+    m_values = CudaBuffer<float>(m_batch_size);
 
     m_context->setTensorAddress("States", m_states.device_ptr());
     m_context->setTensorAddress("WallPriors", m_wall_priors.device_ptr());
