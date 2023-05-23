@@ -1,8 +1,12 @@
 #include "mcts.hpp"
 
+#include <folly/experimental/coro/Collect.h>
+
 #include <algorithm>
 #include <random>
 #include <ranges>
+
+namespace views = std::ranges::views;
 
 MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
     : MCTS{std::move(policy), std::move(board), {}} {}
@@ -18,26 +22,19 @@ MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
 }
 
 folly::coro::Task<double> MCTS::sample(int worker_iterations) {
-    folly::Executor* executor = co_await folly::coro::co_current_executor;
+    std::atomic<int> remaining_iters = worker_iterations;
 
-    std::vector<folly::SemiFuture<folly::Unit>> workers;
-    workers.reserve(m_opts.workers);
+    auto workers = views::iota(0, m_opts.max_parallelism) |
+                   views::transform([&](int) { return sample_worker(remaining_iters); });
 
-    for (int i = 0; i < m_opts.workers; ++i) {
-        workers.push_back(sample_worker(worker_iterations).scheduleOn(executor).start());
-    }
-
-    for (int i = 0; i < m_opts.workers; ++i) {
-        co_await std::move(workers[i]);
-    }
+    co_await folly::coro::collectAllRange(workers);
 
     TreeNode::Value val = m_root->value;
-
     co_return val.total_weight / val.total_samples;
 }
 
-folly::coro::Task<> MCTS::sample_worker(int iterations) {
-    for (int i = 0; i < iterations; ++i) {
+folly::coro::Task<> MCTS::sample_worker(std::atomic<int>& remaining_iters) {
+    while (--remaining_iters > 0) {
         co_await sample_rec(*m_current_root);
     }
 }

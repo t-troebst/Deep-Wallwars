@@ -59,7 +59,7 @@ public:
     struct Options {
         float puct = 3.0;
         int max_depth = 50;
-        int workers = 4;
+        int max_parallelism = 4;
         double direchlet_alpha = 0.2;
         Turn starting_turn = {Player::Red, Turn::First};
         std::uint32_t seed = 42;
@@ -72,7 +72,7 @@ public:
     float root_value() const;
     int root_samples() const;
 
-    folly::coro::Task<double> sample(int worker_iterations);
+    folly::coro::Task<double> sample(int iterations);
 
     Action commit_to_action();
     Action commit_to_action(double temperature);
@@ -93,6 +93,6 @@ private:
     std::atomic<int> m_wasted_inferences = 0;
 
     void add_root_noise();
-    folly::coro::Task<> sample_worker(int iterations);
+    folly::coro::Task<> sample_worker(std::atomic<int>& remaining_iters);
     folly::coro::Task<float> sample_rec(TreeNode& root);
 };
