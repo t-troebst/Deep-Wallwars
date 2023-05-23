@@ -62,6 +62,7 @@ BatchedModel::BatchedModel(nv::ICudaEngine& engine, int batch_size, int queue_si
     m_context->setTensorAddress("StepPriors", m_step_priors.device_ptr());
     m_context->setTensorAddress("Values", m_values.device_ptr());
 
+    m_dequeued_promises.reserve(m_batch_size);
     m_worker = std::jthread{std::bind_front(&BatchedModel::run_worker, this)};
 }
 
@@ -80,22 +81,22 @@ folly::SemiFuture<BatchedModel::Output> BatchedModel::inference(Input input) {
 }
 
 void BatchedModel::run_worker() {
-    std::vector<folly::Promise<Output>> output_promises;
-    output_promises.reserve(m_batch_size);
-
     while (true) {
-        output_promises.clear();
+        m_dequeued_promises.clear();
 
         for (int i = 0; i < m_batch_size; ++i) {
             InferenceTask task;
-            m_tasks.blockingRead(task);
+
+            if (!m_tasks.read(task)) {
+                break;
+            }
 
             if (task.input.state.empty()) {
                 return;
             }
 
             std::ranges::copy(task.input.state, m_states.begin() + m_state_size * i);
-            output_promises.push_back(std::move(task.output));
+            m_dequeued_promises.push_back(std::move(task.output));
         }
 
         m_states.to_device(m_stream);
@@ -107,14 +108,14 @@ void BatchedModel::run_worker() {
         // TODO: eliminate this barrier
         m_stream.synchronize();
 
-        for (int i = 0; i < m_batch_size; ++i) {
+        for (std::size_t i = 0; i < m_dequeued_promises.size(); ++i) {
             Output output{{m_wall_priors.begin() + m_wall_prior_size * i,
                            m_wall_priors.begin() + m_wall_prior_size * (i + 1)},
                           {m_step_priors.begin() + kNumDirections * i,
                            m_step_priors.begin() + kNumDirections * (i + 1)},
                           m_values[i]};
 
-            output_promises[i].setValue(std::move(output));
+            m_dequeued_promises[i].setValue(std::move(output));
         }
     }
 }

@@ -42,7 +42,6 @@ struct TreeNode {
 };
 
 struct MCTSPolicy {
-    virtual TreeNode* initialize(Board board, Turn turn, TreeNode* parent) = 0;
     virtual folly::SemiFuture<TreeNode*> evaluate_position(Board board, Turn turn,
                                                            TreeNode* parent) = 0;
 

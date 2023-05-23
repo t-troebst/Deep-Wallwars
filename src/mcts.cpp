@@ -9,7 +9,7 @@ MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
 
 MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
     : m_policy{std::move(policy)},
-      m_root{m_policy->initialize(board, options.starting_turn, nullptr)},
+      m_root{m_policy->evaluate_position(board, options.starting_turn, nullptr).get()},
       m_current_root{m_root},
       m_opts{options},
       m_twister{options.seed} {}
@@ -157,7 +157,9 @@ void MCTS::force_action(Action const& action) {
         Board board = m_current_root->board;
         board.do_action(m_current_root->turn.player, action);
         te_it->child =
-            m_policy->initialize(std::move(board), m_current_root->turn.next(), m_current_root);
+            m_policy
+                ->evaluate_position(std::move(board), m_current_root->turn.next(), m_current_root)
+                .get();
     }
 
     m_current_root = te_it->child;
