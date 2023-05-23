@@ -39,26 +39,13 @@ public:
     ~CudaBuffer();
 
     T* device_ptr() const;
-    T* host_ptr() const;
     std::size_t size() const;
 
-    operator std::span<T>();
-
-    T* begin();
-    T* end();
-
-    T const* begin() const;
-    T const* end() const;
-
-    T& operator[](std::size_t i);
-    T const& operator[](std::size_t i) const;
-
-    void to_device(CudaStream& stream);
-    void to_host(CudaStream& stream);
+    void to_device(std::span<T> in, CudaStream& stream);
+    void to_host(std::span<T> out, CudaStream& stream);
     
 private:
     T* m_device_ptr;
-    T* m_host_ptr;
     std::size_t m_size;
 };
 
