@@ -1,11 +1,13 @@
 #pragma once
 
+#include <iosfwd>
 #include <memory>
 
 #include "cuda_wrappers.hpp"
 #include "model.hpp"
 
 namespace nvinfer1 {
+class IRuntime;
 class ICudaEngine;
 class IExecutionContext;
 };  // namespace nvinfer1
@@ -25,3 +27,6 @@ private:
     CudaBuffer<float> m_step_priors;
     CudaBuffer<float> m_values;
 };
+
+std::unique_ptr<nvinfer1::ICudaEngine> load_serialized_engine(nvinfer1::IRuntime& runtime,
+                                                              std::istream& binary_in);
