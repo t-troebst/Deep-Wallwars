@@ -7,6 +7,10 @@
 
 #include "model.hpp"
 
+BatchedModelPolicy::BatchedModelPolicy(std::shared_ptr<BatchedModel> model,
+                                       std::shared_ptr<std::ostream> snapshot_stream)
+    : m_model{std::move(model)}, m_snapshot_stream{std::move(snapshot_stream)} {}
+
 folly::coro::Task<MCTSPolicy::Evaluation> BatchedModelPolicy::evaluate_position(Board const& board,
                                                                                 Turn turn,
                                                                                 TreeNode const*) {

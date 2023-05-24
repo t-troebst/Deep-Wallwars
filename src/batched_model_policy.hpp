@@ -6,8 +6,11 @@
 #include "batched_model.hpp"
 #include "mcts.hpp"
 
-class BatchedModelPolicy : MCTSPolicy {
+class BatchedModelPolicy : public MCTSPolicy {
 public:
+    BatchedModelPolicy(std::shared_ptr<BatchedModel> model,
+                       std::shared_ptr<std::ostream> snapshot_stream = nullptr);
+
     folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
                                                     TreeNode const* parent) override;
 
