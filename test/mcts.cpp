@@ -4,7 +4,9 @@
 #include <folly/executors/GlobalExecutor.h>
 #include <folly/executors/QueuedImmediateExecutor.h>
 #include <folly/experimental/coro/BlockingWait.h>
+#include <folly/experimental/coro/Sleep.h>
 
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 
@@ -14,13 +16,13 @@
 struct RightPolicy : MCTSPolicy {
     int samples = 0;
 
-    folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
+    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
                                                     TreeNode const*) override {
         ++samples;
         if (board.is_blocked(Wall{board.position(turn.player), Direction::Right})) {
-            return Evaluation{0, {}};
+            co_return Evaluation{0, {}};
         }
-        return Evaluation{0, {TreeEdge(Direction::Right, 1.0)}};
+        co_return Evaluation{0, {TreeEdge(Direction::Right, 1.0)}};
     };
 };
 
@@ -89,11 +91,12 @@ TEST_CASE("Sample many", "[MCTS]") {
 }
 
 struct SlowRightPolicy : MCTSPolicy {
-    int samples = 0;
+    std::atomic<int> samples = 0;
 
-    folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
+    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
                                                     TreeNode const*) override {
         ++samples;
+        co_await folly::coro::sleep(std::chrono::milliseconds{250});
         Evaluation result;
 
         if (board.is_blocked(Wall{board.position(turn.player), Direction::Right})) {
@@ -101,9 +104,7 @@ struct SlowRightPolicy : MCTSPolicy {
         } else {
             result = Evaluation{0, {TreeEdge(Direction::Right, 1.0)}};
         }
-
-        auto sleep = folly::futures::sleep(std::chrono::milliseconds{500});
-        return std::move(sleep).deferValue([=](folly::Unit) { return result; });
+        co_return result;
     };
 };
 

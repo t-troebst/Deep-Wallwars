@@ -3,7 +3,7 @@
 SimplePolicy::SimplePolicy(float move_prior, float good_move_bias, float bad_move_bias)
     : m_move_prior{move_prior}, m_good_move_bias{good_move_bias}, m_bad_move_bias{bad_move_bias} {}
 
-folly::SemiFuture<MCTSPolicy::Evaluation> SimplePolicy::evaluate_position(Board const& board,
+folly::coro::Task<MCTSPolicy::Evaluation> SimplePolicy::evaluate_position(Board const& board,
                                                                           Turn turn,
                                                                           TreeNode const*) {
     std::vector<Wall> legal_walls;
@@ -44,5 +44,5 @@ folly::SemiFuture<MCTSPolicy::Evaluation> SimplePolicy::evaluate_position(Board 
         edges.emplace_back(wall, wall_prior);
     }
 
-    return Evaluation(board.score_for(turn.player), std::move(edges));
+    co_return Evaluation(board.score_for(turn.player), std::move(edges));
 }

@@ -47,7 +47,7 @@ struct MCTSPolicy {
         std::vector<TreeEdge> edges;
     };
 
-    virtual folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
+    virtual folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
                                                             TreeNode const* parent) = 0;
     virtual void snapshot(TreeNode const& current_root);
 
@@ -105,6 +105,5 @@ private:
     void add_root_noise();
     folly::coro::Task<float> sample_rec(TreeNode& root);
 
-    TreeNode* create_tree_node(Board board, Turn turn, TreeNode* parent);
-    folly::coro::Task<TreeNode*> create_tree_node_async(Board board, Turn turn, TreeNode* parent);
+    folly::coro::Task<TreeNode*> create_tree_node(Board board, Turn turn, TreeNode* parent);
 };

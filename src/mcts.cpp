@@ -1,5 +1,6 @@
 #include "mcts.hpp"
 
+#include <folly/experimental/coro/BlockingWait.h>
 #include <folly/experimental/coro/Collect.h>
 
 #include <algorithm>
@@ -49,7 +50,7 @@ MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
 
 MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
     : m_policy{std::move(policy)},
-      m_root{create_tree_node(board, options.starting_turn, nullptr)},
+      m_root{folly::coro::blockingWait(create_tree_node(board, options.starting_turn, nullptr))},
       m_current_root{m_root.get()},
       m_opts{options},
       m_gamma_dist{options.direchlet_alpha, 1.0},
@@ -114,7 +115,7 @@ folly::coro::Task<float> MCTS::sample_rec(TreeNode& root) {
         next_board.do_action(root.turn.player, te.action);
 
         TreeNode* new_node =
-            co_await create_tree_node_async(std::move(next_board), root.turn.next(), &root);
+            co_await create_tree_node(std::move(next_board), root.turn.next(), &root);
         TreeNode* expected = nullptr;
 
         value = new_node->value.load().total_weight;
@@ -210,8 +211,8 @@ void MCTS::force_action(Action const& action) {
     if (!te_it->child) {
         Board board = m_current_root->board;
         board.do_action(m_current_root->turn.player, action);
-        te_it->child =
-            create_tree_node(std::move(board), m_current_root->turn.next(), m_current_root);
+        te_it->child = folly::coro::blockingWait(
+            create_tree_node(std::move(board), m_current_root->turn.next(), m_current_root));
     }
 
     m_current_root = te_it->child;
@@ -240,20 +241,7 @@ void MCTS::add_root_noise() {
     }
 }
 
-TreeNode* MCTS::create_tree_node(Board board, Turn turn, TreeNode* parent) {
-    MCTSPolicy::Evaluation eval = m_policy->evaluate_position(board, turn, parent).get();
-    TreeNode* result = new TreeNode{parent,
-                                    std::move(board),
-                                    turn,
-                                    parent ? parent->depth + 1 : 0,
-                                    TreeNode::Value{eval.value, 1},
-                                    std::move(eval.edges)};
-
-    return result;
-}
-
-folly::coro::Task<TreeNode*> MCTS::create_tree_node_async(Board board, Turn turn,
-                                                          TreeNode* parent) {
+folly::coro::Task<TreeNode*> MCTS::create_tree_node(Board board, Turn turn, TreeNode* parent) {
     MCTSPolicy::Evaluation eval = co_await m_policy->evaluate_position(board, turn, parent);
     TreeNode* result = new TreeNode{parent,
                                     std::move(board),

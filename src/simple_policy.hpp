@@ -6,7 +6,7 @@ class SimplePolicy : public MCTSPolicy {
 public:
     SimplePolicy(float move_prior, float good_move_bias, float bad_move_bias);
 
-    folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
+    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
                                                     TreeNode const*) override;
 
 private:
