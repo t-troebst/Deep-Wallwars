@@ -1,8 +1,10 @@
 #pragma once
 
-#include "mcts.hpp"
+#include <iosfwd>
+#include <mutex>
 
-struct BatchedModel;
+#include "batched_model.hpp"
+#include "mcts.hpp"
 
 class BatchedModelPolicy : MCTSPolicy {
 public:
@@ -13,4 +15,9 @@ public:
 
 private:
     std::shared_ptr<BatchedModel> m_model;
+    std::shared_ptr<std::ostream> m_snapshot_stream;
+    std::mutex m_snapshot_mutex;
+
+    std::vector<float> convert_to_state(Board const& bord, Turn turn) const;
+    BatchedModel::Output convert_to_output(TreeNode const& node) const;
 };

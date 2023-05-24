@@ -6,13 +6,12 @@
 #include "model.hpp"
 
 constexpr int kDefaultBatchesInQueue = 16;
-constexpr int kNumDirections = 4;
 
 BatchedModel::BatchedModel(std::unique_ptr<Model> model)
     : BatchedModel{std::move(model), kDefaultBatchesInQueue * model->batch_size()} {}
 
 BatchedModel::BatchedModel(std::unique_ptr<Model> model, int queue_size)
-    : m_tasks(queue_size),  m_model{std::move(model)}  {
+    : m_tasks(queue_size), m_model{std::move(model)} {
     m_worker = std::jthread{std::bind_front(&BatchedModel::run_worker, this)};
 }
 
@@ -34,7 +33,7 @@ void BatchedModel::run_worker() {
     std::vector<folly::Promise<Output>> dequeued_promises;
     std::vector<float> states(m_model->batch_size() * m_model->state_size());
     std::vector<float> wall_priors(m_model->batch_size() * m_model->wall_prior_size());
-    std::vector<float> step_priors(m_model->batch_size() * kNumDirections);
+    std::vector<float> step_priors(m_model->batch_size() * 4);
     std::vector<float> values(m_model->batch_size());
 
     while (true) {
@@ -56,13 +55,13 @@ void BatchedModel::run_worker() {
         m_model->inference(states, {wall_priors, step_priors, values});
 
         for (std::size_t i = 0; i < dequeued_promises.size(); ++i) {
-            Output output{{wall_priors.begin() + m_model->wall_prior_size() * i,
-                           wall_priors.begin() + m_model->wall_prior_size() * (i + 1)},
-                          {step_priors.begin() + kNumDirections * i,
-                           step_priors.begin() + kNumDirections * (i + 1)},
-                          values[i]};
+            std::vector<float> wall_prior{
+                wall_priors.begin() + m_model->wall_prior_size() * i,
+                wall_priors.begin() + m_model->wall_prior_size() * (i + 1)};
+            std::array<float, 4> step_prior;
+            std::copy_n(step_priors.begin() + 4 * i, 4, step_prior.begin());
 
-            dequeued_promises[i].setValue(std::move(output));
+            dequeued_promises[i].setValue(Output{std::move(wall_prior), step_prior, values[i]});
         }
 
         dequeued_promises.clear();

@@ -456,6 +456,35 @@ int Board::distance(Cell start, Cell target) const {
     return -1;
 }
 
+void Board::fill_relative_distances(Cell start, std::span<float> dists) const {
+    if (int(dists.size()) != m_columns * m_rows) {
+        throw std::runtime_error("dists size does not match!");
+    }
+
+    std::ranges::fill(dists, 1.0f);
+
+    std::deque<std::pair<Cell, int>> queue = {{start, 0}};
+
+    while (!queue.empty()) {
+        auto const [top, dist] = queue.front();
+        queue.pop_front();
+
+        dists[index_from_cell(top)] = float(dist) / (m_columns * m_rows);
+
+        for (Direction dir : kDirections) {
+            if (is_blocked({top, dir})) {
+                continue;
+            }
+
+            Cell const neighbor = top.step(dir);
+
+            if (dists[index_from_cell(neighbor)] == 1.0f) {
+                queue.push_back({neighbor, dist + 1});
+            }
+        }
+    }
+}
+
 Cell Board::cell_at_index(int i) const {
     return {i / m_rows, i % m_rows};
 }

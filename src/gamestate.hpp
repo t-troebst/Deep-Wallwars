@@ -5,6 +5,7 @@
 #include <iosfwd>
 #include <optional>
 #include <set>
+#include <span>
 #include <string_view>
 #include <variant>
 #include <vector>
@@ -94,7 +95,7 @@ public:
     Cell goal(Player player) const;
 
     int distance(Cell start, Cell target) const;
-    // TODO: output BFS
+    void fill_relative_distances(Cell start, std::span<float> dists) const;
 
     int columns() const;
     int rows() const;

@@ -13,7 +13,7 @@ class BatchedModel {
 public:
     struct Output {
         std::vector<float> wall_prior;
-        std::vector<float> step_prior;
+        std::array<float, 4> step_prior;
         float value;
     };
 
