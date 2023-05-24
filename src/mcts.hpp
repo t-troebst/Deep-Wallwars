@@ -48,7 +48,8 @@ struct MCTSPolicy {
     };
 
     virtual folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
-                                                            TreeNode* parent) = 0;
+                                                            TreeNode const* parent) = 0;
+    virtual void snapshot(TreeNode const& current_root);
 
     MCTSPolicy() = default;
 

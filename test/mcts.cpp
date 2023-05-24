@@ -14,8 +14,8 @@
 struct RightPolicy : MCTSPolicy {
     int samples = 0;
 
-    virtual folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
-                                                            TreeNode*) {
+    folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
+                                                    TreeNode const*) override {
         ++samples;
         if (board.is_blocked(Wall{board.position(turn.player), Direction::Right})) {
             return Evaluation{0, {}};
@@ -91,8 +91,8 @@ TEST_CASE("Sample many", "[MCTS]") {
 struct SlowRightPolicy : MCTSPolicy {
     int samples = 0;
 
-    virtual folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
-                                                            TreeNode*) {
+    folly::SemiFuture<Evaluation> evaluate_position(Board const& board, Turn turn,
+                                                    TreeNode const*) override {
         ++samples;
         Evaluation result;
 

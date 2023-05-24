@@ -4,7 +4,8 @@ SimplePolicy::SimplePolicy(float move_prior, float good_move_bias, float bad_mov
     : m_move_prior{move_prior}, m_good_move_bias{good_move_bias}, m_bad_move_bias{bad_move_bias} {}
 
 folly::SemiFuture<MCTSPolicy::Evaluation> SimplePolicy::evaluate_position(Board const& board,
-                                                                          Turn turn, TreeNode*) {
+                                                                          Turn turn,
+                                                                          TreeNode const*) {
     std::vector<Wall> legal_walls;
     if (m_move_prior < 1) {
         legal_walls = board.legal_walls();

@@ -42,6 +42,8 @@ TreeNode::~TreeNode() {
     }
 }
 
+void MCTSPolicy::snapshot(TreeNode const&) {}
+
 MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
     : MCTS{std::move(policy), std::move(board), {}} {}
 
@@ -140,6 +142,8 @@ folly::coro::Task<float> MCTS::sample_rec(TreeNode& root) {
 }
 
 Action MCTS::commit_to_action() {
+    m_policy->snapshot(*m_current_root);
+
     if (m_current_root->edges.empty()) {
         throw std::runtime_error("No action available!");
     }
@@ -158,6 +162,8 @@ Action MCTS::commit_to_action() {
 }
 
 Action MCTS::commit_to_action(float temperature) {
+    m_policy->snapshot(*m_current_root);
+
     if (m_current_root->edges.empty()) {
         throw std::runtime_error("No action available!");
     }
