@@ -38,6 +38,7 @@ struct TreeNode {
     std::vector<TreeEdge> edges;
 
     void add_sample(float weight);
+    ~TreeNode();
 };
 
 struct MCTSPolicy {
@@ -93,7 +94,7 @@ public:
 
 private:
     std::shared_ptr<MCTSPolicy> m_policy;
-    TreeNode* m_root;
+    std::unique_ptr<TreeNode> m_root;
     TreeNode* m_current_root;
     Options m_opts;
     std::gamma_distribution<float> m_gamma_dist;
