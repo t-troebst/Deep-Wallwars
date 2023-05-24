@@ -1,5 +1,7 @@
 #include "gamestate.hpp"
 
+#include <folly/Overload.h>
+
 #include <algorithm>
 #include <array>
 #include <deque>
@@ -8,8 +10,6 @@
 #include <iostream>
 #include <ranges>
 #include <sstream>
-
-#include "util.hpp"
 
 namespace ranges = std::ranges;
 namespace views = std::ranges::views;
@@ -89,26 +89,26 @@ Turn Turn::prev() const {
 std::string Move::standard_notation(Cell start) const {
     std::stringstream out;
     // Whew, what ugly formatting by clang-format...
-    std::visit(overload{[&](Direction dir) {
-                            Cell cell = start.step(dir);
-                            std::visit(overload{[&](Direction dir2) { out << cell.step(dir2); },
-                                                [&](Wall wall) { out << cell << ' ' << wall; }},
-                                       second);
-                        },
-                        [&](Wall wall) {
-                            std::visit(overload{[&](Direction dir) {
-                                                    out << start.step(dir) << ' ' << wall;
-                                                },
-                                                [&](Wall wall2) {
-                                                    if (wall < wall2) {
-                                                        out << wall << ' ' << wall2;
-                                                    } else {
-                                                        out << wall2 << ' ' << wall;
-                                                    }
-                                                }},
-                                       second);
-                        }},
-               first);
+    folly::variant_match(
+        first,
+        [&](Direction dir) {
+            Cell cell = start.step(dir);
+
+            folly::variant_match(
+                second, [&](Direction dir2) { out << cell.step(dir2); },
+                [&](Wall wall) { out << cell << ' ' << wall; });
+        },
+        [&](Wall wall) {
+            folly::variant_match(
+                second, [&](Direction dir) { out << start.step(dir) << ' ' << wall; },
+                [&](Wall wall2) {
+                    if (wall < wall2) {
+                        out << wall << ' ' << wall2;
+                    } else {
+                        out << wall2 << ' ' << wall;
+                    }
+                });
+        });
 
     return out.str();
 }
@@ -392,9 +392,9 @@ void Board::place_wall(Player player, Wall wall) {
 }
 
 void Board::do_action(Player player, Action action) {
-    std::visit(overload{[&](Direction dir) { take_step(player, dir); },
-                        [&](Wall wall) { place_wall(player, wall); }},
-               action);
+    folly::variant_match(
+        action, [&](Direction dir) { take_step(player, dir); },
+        [&](Wall wall) { place_wall(player, wall); });
 }
 
 std::optional<Player> Board::winner() const {

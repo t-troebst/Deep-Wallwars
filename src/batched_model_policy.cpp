@@ -6,7 +6,6 @@
 #include <thread>
 
 #include "model.hpp"
-#include "util.hpp"
 
 folly::coro::Task<MCTSPolicy::Evaluation> BatchedModelPolicy::evaluate_position(Board const& board,
                                                                                 Turn turn,
