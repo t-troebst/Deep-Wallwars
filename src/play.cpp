@@ -17,8 +17,8 @@ folly::coro::Task<Player> computer_play_single(const Board& board,
                                                std::shared_ptr<MCTSPolicy> policy2,
                                                std::uint32_t seed,
                                                ComputerPlayOptions const& opts) {
-    MCTS mcts1{policy1, board, {.seed = opts.seed}};
-    MCTS mcts2{policy2, board, {.seed = opts.seed}};
+    MCTS mcts1{policy1, board, {.seed = seed}};
+    MCTS mcts2{policy2, board, {.seed = seed}};
 
     while (true) {
         co_await mcts1.sample(opts.samples);
