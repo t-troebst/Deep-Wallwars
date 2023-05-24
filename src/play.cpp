@@ -1,3 +1,58 @@
 #include "play.hpp"
 
-// TODO
+#include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/experimental/coro/Collect.h>
+#include <folly/experimental/coro/Task.h>
+
+#include <algorithm>
+#include <ranges>
+
+#include "mcts.hpp"
+
+namespace views = std::ranges::views;
+
+folly::coro::Task<Player> computer_play_single(const Board& board,
+                                               std::shared_ptr<MCTSPolicy> policy1,
+                                               std::shared_ptr<MCTSPolicy> policy2,
+                                               ComputerPlayOptions const& opts) {
+    MCTS mcts1{policy1, board};
+    MCTS mcts2{policy2, board};
+
+    while (true) {
+        co_await mcts1.sample(opts.samples);
+        Move move = mcts1.commit_to_move(opts.temperature);
+
+        if (mcts1.current_board().winner()) {
+            co_return Player::Red;
+        }
+
+        mcts2.force_move(move);
+        co_await mcts2.sample(opts.samples);
+
+        if (mcts2.current_board().winner()) {
+            co_return Player::Blue;
+        }
+    }
+}
+
+folly::coro::Task<double> computer_play(const Board& board, std::shared_ptr<MCTSPolicy> policy1,
+                                        std::shared_ptr<MCTSPolicy> policy2, int games,
+                                        ComputerPlayOptions const& opts) {
+    folly::Executor* executor = co_await folly::coro::co_current_executor;
+
+    auto game_tasks =
+        views::iota(0, games) | views::transform([&](int) {
+            return computer_play_single(board, policy1, policy2, opts).scheduleOn(executor).start();
+        });
+
+    auto results = co_await folly::coro::collectAllRange(game_tasks);
+    int red_wins = 0;
+
+    for (Player player : results) {
+        if (player == Player::Red) {
+            ++red_wins;
+        }
+    }
+
+    co_return double(red_wins) / games;
+}
