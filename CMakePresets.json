@@ -7,13 +7,38 @@
     },
     "configurePresets": [
         {
-            "name": "default",
-            "displayName": "Default",
-            "description": "Default build settings using GCC & GDB in Debug mode",
-            "binaryDir": "${sourceDir}/build",
+            "name": "debug",
+            "displayName": "Debug",
+            "description": "Debug build (warning: may stack overflow due to coroutines)",
+            "binaryDir": "${sourceDir}/build_debug",
             "cacheVariables": {
                 "CMAKE_CXX_COMPILER": "g++",
                 "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wpedantic -fsanitize=address,undefined",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+            }
+        },
+        {
+            "name": "default",
+            "displayName": "Default",
+            "description": "Default build: release with debug info, safe for coroutines",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "g++",
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wpedantic"
+            }
+        },
+        {
+            "name": "relsan",
+            "displayName": "Release with Sanitizers",
+            "description": "Release build with sanitizers enabled (warning: may also stack overflow)",
+            "binaryDir": "${sourceDir}/build_relsan",
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "g++",
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "CMAKE_CXX_FLAGS": "-Wall -Wextra -Wpedantic -fsanitize=address,undefined",
                 "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
