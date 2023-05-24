@@ -36,8 +36,8 @@ private:
         folly::Promise<Output> output;
     };
 
-    std::unique_ptr<Model> m_model;
     folly::MPMCQueue<InferenceTask> m_tasks;
+    std::unique_ptr<Model> m_model;
     std::jthread m_worker;
 
     void run_worker();

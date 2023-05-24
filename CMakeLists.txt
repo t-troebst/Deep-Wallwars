@@ -31,6 +31,7 @@ target_link_libraries(deep_ww PRIVATE core)
 find_package(Catch2 3)
 if (Catch2_FOUND)
     add_executable(unit_tests
+        test/batched_model.cpp
         test/gamestate.cpp
         test/main.cpp
         test/mcts.cpp

@@ -12,9 +12,9 @@ BatchedModel::BatchedModel(std::unique_ptr<Model> model)
     : BatchedModel{std::move(model), kDefaultBatchesInQueue * model->batch_size()} {}
 
 BatchedModel::BatchedModel(std::unique_ptr<Model> model, int queue_size)
-    : m_model{std::move(model)},
-      m_tasks(queue_size),
-      m_worker{std::bind_front(&BatchedModel::run_worker, this)} {}
+    : m_tasks(queue_size),  m_model{std::move(model)}  {
+    m_worker = std::jthread{std::bind_front(&BatchedModel::run_worker, this)};
+}
 
 BatchedModel::~BatchedModel() {
     // Sentinel value so the worker stops (eventually)

@@ -27,9 +27,9 @@ public:
 
 protected:
     int m_batch_size;
-    int m_wall_prior_size;
     int m_state_size;
+    int m_wall_prior_size;
 
     Model() = default;
-    Model(int batch_size, int wall_prior_size, int state_size);
+    Model(int batch_size, int channels, int columns, int rows);
 };
