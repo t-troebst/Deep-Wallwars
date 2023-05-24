@@ -40,7 +40,9 @@ void BatchedModel::run_worker() {
         for (int i = 0; i < m_model->batch_size(); ++i) {
             InferenceTask task;
 
-            if (!m_tasks.read(task)) {
+            if (i == 0) {
+                m_tasks.blockingRead(task);
+            } else if (!m_tasks.read(task)) {
                 break;
             }
 
