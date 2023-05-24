@@ -38,7 +38,6 @@ struct TreeNode {
     std::vector<TreeEdge> edges;
 
     void add_sample(float weight);
-    ~TreeNode();
 };
 
 struct MCTSPolicy {
@@ -93,9 +92,11 @@ public:
     void force_action(Action const& action);
     void force_move(Move const& move);
 
+    ~MCTS();
+
 private:
     std::shared_ptr<MCTSPolicy> m_policy;
-    std::unique_ptr<TreeNode> m_root;
+    TreeNode* m_root;
     TreeNode* m_current_root;
     Options m_opts;
     std::gamma_distribution<float> m_gamma_dist;
@@ -103,7 +104,11 @@ private:
     std::atomic<int> m_wasted_inferences = 0;
 
     void add_root_noise();
-    folly::coro::Task<float> sample_rec(TreeNode& root);
+    folly::coro::Task<void> single_sample();
+    TreeEdge& get_best_edge(TreeNode& current) const;
+    folly::coro::Task<float> initialize_child(TreeNode& current, TreeEdge& edge);
+    folly::coro::Task<float> sample_rec(TreeNode& current);
+    void delete_subtree(TreeNode& node);
 
     folly::coro::Task<TreeNode*> create_tree_node(Board board, Turn turn, TreeNode* parent);
 };

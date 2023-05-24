@@ -1,8 +1,9 @@
 #include "play.hpp"
 
-#include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/Executor.h>
 #include <folly/experimental/coro/Collect.h>
 #include <folly/experimental/coro/Task.h>
+#include <folly/logging/xlog.h>
 
 #include <algorithm>
 #include <random>
@@ -15,37 +16,54 @@ namespace views = std::ranges::views;
 folly::coro::Task<Player> computer_play_single(const Board& board,
                                                std::shared_ptr<MCTSPolicy> policy1,
                                                std::shared_ptr<MCTSPolicy> policy2,
-                                               std::uint32_t seed,
+                                               std::uint32_t index,
                                                ComputerPlayOptions const& opts) {
-    MCTS mcts1{policy1, board, {.seed = seed}};
-    MCTS mcts2{policy2, board, {.seed = seed}};
+    MCTS mcts1{policy1, board, {.seed = index}};
+    MCTS mcts2{policy2, board, {.seed = index}};
+
+    XLOGF(INFO, "Starting game {}.", index);
+    int num_moves = 0;
 
     while (true) {
-        co_await mcts1.sample(opts.samples);
-        Move move = mcts1.commit_to_move(opts.temperature);
+        for (int i = 0; i < 2; ++i) {
+            co_await mcts1.sample(opts.samples);
+            Action action = mcts1.commit_to_action(opts.temperature);
 
-        if (mcts1.current_board().winner()) {
-            co_return Player::Red;
+            if (mcts1.current_board().winner()) {
+                XLOGF(INFO, "Red player won game {}.", index);
+                co_return Player::Red;
+            }
+
+            mcts2.force_action(action);
         }
 
-        mcts2.force_move(move);
-        co_await mcts2.sample(opts.samples);
+        for (int i = 0; i < 2; ++i) {
+            co_await mcts2.sample(opts.samples);
+            Action action = mcts2.commit_to_action(opts.temperature);
 
-        if (mcts2.current_board().winner()) {
-            co_return Player::Blue;
+            if (mcts2.current_board().winner()) {
+                XLOGF(INFO, "Blue player won game {}.", index);
+                co_return Player::Blue;
+            }
+            mcts1.force_action(action);
         }
+
+        num_moves += 2;
+
+        XLOGF(INFO, "Game {} hit {} moves with {} samples the roots.", index, num_moves,
+              mcts1.root_samples() + mcts2.root_samples());
     }
 }
 
-folly::coro::Task<double> computer_play(const Board& board, std::shared_ptr<MCTSPolicy> policy1,
+folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy> policy1,
                                         std::shared_ptr<MCTSPolicy> policy2, int games,
-                                        ComputerPlayOptions const& opts) {
-    std::mt19937_64 twister{opts.seed};
-    std::uniform_int_distribution<std::uint32_t> dist;
+                                        ComputerPlayOptions opts) {
+    folly::Executor* executor = co_await folly::coro::co_current_executor;
 
-    auto game_tasks = views::iota(0, games) | views::transform([&](int) {
-                          return computer_play_single(board, policy1, policy2, dist(twister), opts);
-                      });
+    auto game_tasks =
+        views::iota(1, games + 1) | views::transform([&](int i) {
+            return computer_play_single(board, policy1, policy2, i, opts).scheduleOn(executor);
+        });
 
     auto results = co_await folly::coro::collectAllRange(game_tasks);
     int red_wins = 0;
@@ -55,6 +73,8 @@ folly::coro::Task<double> computer_play(const Board& board, std::shared_ptr<MCTS
             ++red_wins;
         }
     }
+
+    XLOGF(INFO, "{} games have finished and red won {} of them.", games, red_wins);
 
     co_return double(red_wins) / games;
 }

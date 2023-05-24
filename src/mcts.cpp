@@ -37,12 +37,6 @@ void TreeNode::add_sample(float weight) {
     } while (!value.compare_exchange_weak(old_val, new_val));
 }
 
-TreeNode::~TreeNode() {
-    for (auto& te : edges) {
-        delete te.child.load();
-    }
-}
-
 void MCTSPolicy::snapshot(TreeNode const&) {}
 
 MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
@@ -51,7 +45,7 @@ MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
 MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
     : m_policy{std::move(policy)},
       m_root{folly::coro::blockingWait(create_tree_node(board, options.starting_turn, nullptr))},
-      m_current_root{m_root.get()},
+      m_current_root{m_root},
       m_opts{options},
       m_gamma_dist{options.direchlet_alpha, 1.0},
       m_twister{options.seed} {
@@ -68,21 +62,9 @@ folly::coro::Task<float> MCTS::sample(int samples) {
     co_return val.total_weight / val.total_samples;
 }
 
-folly::coro::Task<float> MCTS::sample_rec(TreeNode& root) {
-    if (auto winner = root.board.winner(); winner) {
-        co_return *winner == root.turn.player ? 1 : -1;
-    }
-
-    if (root.depth >= m_opts.max_depth) {
-        co_return root.board.score_for(root.turn.player);
-    }
-
-    if (root.edges.empty()) {
-        co_return -1;
-    }
-
-    TreeEdge& te = *std::ranges::max_element(root.edges, {}, [&](TreeEdge const& te) {
-        TreeNode::Value root_val = root.value;
+TreeEdge& MCTS::get_best_edge(TreeNode& current) const {
+    return *std::ranges::max_element(current.edges, {}, [&](TreeEdge const& te) {
+        TreeNode::Value root_val = current.value;  // TODO: load this only once maybe?
         TreeNode* child = te.child;
 
         float const p_root = m_opts.puct * std::sqrt(float(root_val.total_samples));
@@ -99,6 +81,11 @@ folly::coro::Task<float> MCTS::sample_rec(TreeNode& root) {
         }
 
         TreeNode::Value child_val = child->value;
+
+        if (current.turn.action == Turn::Second) {
+            child_val.total_weight *= -1;
+        }
+
         int const active_samples = te.active_samples;
         child_val.total_weight -= m_opts.active_sample_penalty * active_samples;
         child_val.total_samples += active_samples;
@@ -106,31 +93,57 @@ folly::coro::Task<float> MCTS::sample_rec(TreeNode& root) {
         return child_val.total_weight / child_val.total_samples +
                te.prior * p_root / (1 + child_val.total_samples);
     });
+}
 
-    ++te.active_samples;
-    float value;
+folly::coro::Task<float> MCTS::initialize_child(TreeNode& current, TreeEdge& edge) {
+    Board next_board{current.board};
+    next_board.do_action(current.turn.player, edge.action);
 
-    if (te.child == nullptr) {
-        Board next_board{root.board};
-        next_board.do_action(root.turn.player, te.action);
+    TreeNode* new_node =
+        co_await create_tree_node(std::move(next_board), current.turn.next(), &current);
 
-        TreeNode* new_node =
-            co_await create_tree_node(std::move(next_board), root.turn.next(), &root);
-        TreeNode* expected = nullptr;
+    float value = new_node->value.load().total_weight;
+    TreeNode* child = nullptr;
 
-        value = new_node->value.load().total_weight;
-
-        if (!te.child.compare_exchange_strong(expected, new_node)) {
-            ++m_wasted_inferences;
-            delete new_node;
-        }
-    } else {
-        value = co_await sample_rec(*te.child);
+    if (!edge.child.compare_exchange_strong(child, new_node)) {
+        ++m_wasted_inferences;
+        child->add_sample(value);
+        delete new_node;
     }
 
-    --te.active_samples;
-    root.add_sample(value);
+    co_return value;
+}
 
+folly::coro::Task<float> MCTS::sample_rec(TreeNode& current) {
+    if (auto winner = current.board.winner(); winner) {
+        float value = *winner == current.turn.player ? 1 : -1;
+        current.add_sample(value);
+        co_return value;
+    }
+
+    if (current.depth - m_current_root->depth >= m_opts.max_depth) {
+        float value = current.board.score_for(current.turn.player);
+        current.add_sample(value);
+        co_return value;
+    }
+
+    if (current.edges.empty()) {
+        float value = -1;
+        current.add_sample(value);
+        co_return value;
+    }
+
+    TreeEdge& te = get_best_edge(current);
+    ++te.active_samples;
+    TreeNode* child = te.child;
+    float value = co_await (child == nullptr ? initialize_child(current, te) : sample_rec(*child));
+
+    if (current.turn.action == Turn::Second) {
+        value *= -1;
+    }
+
+    current.add_sample(value);
+    --te.active_samples;
     co_return value;
 }
 
@@ -148,6 +161,13 @@ Action MCTS::commit_to_action() {
 
     if (!te.child) {
         throw std::runtime_error("No explored action available!");
+    }
+
+    for (TreeEdge& te2 : m_current_root->edges) {
+        if (te2.child && te2.child != te.child) {
+            delete_subtree(*te2.child);
+            te2.child = nullptr;
+        }
     }
 
     m_current_root = te.child;
@@ -173,6 +193,13 @@ Action MCTS::commit_to_action(float temperature) {
 
     if (!te.child) {
         throw std::runtime_error("No explored action available!");
+    }
+
+    for (TreeEdge& te2 : m_current_root->edges) {
+        if (te2.child && te2.child != te.child) {
+            delete_subtree(*te2.child);
+            te2.child = nullptr;
+        }
     }
 
     m_current_root = te.child;
@@ -202,7 +229,7 @@ Move MCTS::commit_to_move(float temperature) {
 
 void MCTS::force_action(Action const& action) {
     auto const te_it = std::ranges::find_if(
-        m_current_root->edges, [&](TreeEdge const& te) { return te.action == action; });
+        m_current_root->edges, [&](TreeEdge const& te) { return action == te.action; });
 
     if (te_it == m_current_root->edges.end()) {
         throw std::runtime_error("Could not find action - not legal?");
@@ -251,6 +278,27 @@ folly::coro::Task<TreeNode*> MCTS::create_tree_node(Board board, Turn turn, Tree
                                     std::move(eval.edges)};
 
     co_return result;
+}
+
+MCTS::~MCTS() {
+    delete_subtree(*m_root);
+}
+
+void MCTS::delete_subtree(TreeNode& tn) {
+    std::vector<TreeNode*> delete_stack{&tn};
+
+    while (!delete_stack.empty()) {
+        TreeNode* tn_top = delete_stack.back();
+        delete_stack.pop_back();
+
+        for (TreeEdge const& te : tn_top->edges) {
+            if (te.child != nullptr) {
+                delete_stack.push_back(te.child);
+            }
+        }
+
+        delete tn_top;
+    }
 }
 
 Board const& MCTS::current_board() const {

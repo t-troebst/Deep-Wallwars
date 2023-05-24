@@ -16,6 +16,6 @@ struct ComputerPlayOptions {
     std::uint32_t seed = 42;
 };
 
-folly::coro::Task<double> computer_play(Board const& board, std::shared_ptr<MCTSPolicy> policy1,
+folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy> policy1,
                                         std::shared_ptr<MCTSPolicy> policy2, int games,
-                                        ComputerPlayOptions const& opts = {});
+                                        ComputerPlayOptions opts = {});
