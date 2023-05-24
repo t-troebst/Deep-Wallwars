@@ -78,9 +78,13 @@ def main():
     layers = 10
     batch_size = 64
 
+    input_names = ["States"]
+    output_names = ["WallPriors", "StepPriors", "Values"]
+
     model = ResNet(columns, rows, channels, layers).eval()
     dummy_input = torch.randn(batch_size, 7, columns, rows)
-    torch.onnx.export(model, dummy_input, "model.onnx")
+    torch.onnx.export(model, dummy_input, "model.onnx", input_names = input_names, output_names =
+                      output_names)
 
 if __name__ == "__main__":
     main()
