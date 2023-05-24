@@ -57,22 +57,14 @@ MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
     add_root_noise();
 }
 
-folly::coro::Task<float> MCTS::sample(int worker_iterations) {
-    std::atomic<int> remaining_iters = worker_iterations;
+folly::coro::Task<float> MCTS::sample(int samples) {
+    auto sample_tasks = views::iota(0, samples) |
+                        views::transform([&](int) { return sample_rec(*m_current_root); });
 
-    auto workers = views::iota(0, m_opts.max_parallelism) |
-                   views::transform([&](int) { return sample_worker(remaining_iters); });
-
-    co_await folly::coro::collectAllRange(workers);
+    co_await folly::coro::collectAllWindowed(sample_tasks, m_opts.max_parallelism);
 
     TreeNode::Value val = m_root->value;
     co_return val.total_weight / val.total_samples;
-}
-
-folly::coro::Task<> MCTS::sample_worker(std::atomic<int>& remaining_iters) {
-    while (--remaining_iters >= 0) {
-        co_await sample_rec(*m_current_root);
-    }
 }
 
 folly::coro::Task<float> MCTS::sample_rec(TreeNode& root) {

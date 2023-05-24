@@ -38,12 +38,9 @@ folly::coro::Task<Player> computer_play_single(const Board& board,
 folly::coro::Task<double> computer_play(const Board& board, std::shared_ptr<MCTSPolicy> policy1,
                                         std::shared_ptr<MCTSPolicy> policy2, int games,
                                         ComputerPlayOptions const& opts) {
-    folly::Executor* executor = co_await folly::coro::co_current_executor;
-
-    auto game_tasks =
-        views::iota(0, games) | views::transform([&](int) {
-            return computer_play_single(board, policy1, policy2, opts).scheduleOn(executor).start();
-        });
+    auto game_tasks = views::iota(0, games) | views::transform([&](int) {
+                          return computer_play_single(board, policy1, policy2, opts);
+                      });
 
     auto results = co_await folly::coro::collectAllRange(game_tasks);
     int red_wins = 0;

@@ -103,7 +103,6 @@ private:
     std::atomic<int> m_wasted_inferences = 0;
 
     void add_root_noise();
-    folly::coro::Task<> sample_worker(std::atomic<int>& remaining_iters);
     folly::coro::Task<float> sample_rec(TreeNode& root);
 
     TreeNode* create_tree_node(Board board, Turn turn, TreeNode* parent);
