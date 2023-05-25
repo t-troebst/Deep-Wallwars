@@ -2,6 +2,7 @@
 
 #include <array>
 #include <compare>
+#include <cstdint>
 #include <iosfwd>
 #include <optional>
 #include <set>
@@ -39,6 +40,18 @@ struct Wall {
     std::strong_ordering operator<=>(Wall const& other) const = default;
     bool operator==(Wall const& other) const = default;
 };
+
+namespace std {
+template <>
+struct hash<Cell> {
+    std::uint64_t operator()(Cell cell) const;
+};
+
+template <>
+struct hash<Wall> {
+    std::uint64_t operator()(Wall wall) const;
+};
+}  // namespace std
 
 using Action = std::variant<Direction, Wall>;
 
@@ -102,6 +115,8 @@ public:
 
     Cell cell_at_index(int i) const;
     int index_from_cell(Cell cell) const;
+
+    std::uint64_t hash_from_pov(Player player, bool hash_wall_color = false) const;
 
 private:
     struct State {

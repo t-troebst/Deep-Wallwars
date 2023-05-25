@@ -12,6 +12,7 @@
 
 #include "batched_model.hpp"
 #include "batched_model_policy.hpp"
+#include "cached_policy.hpp"
 #include "mcts.hpp"
 #include "play.hpp"
 #include "simple_policy.hpp"
@@ -64,12 +65,16 @@ int main(int argc, char** argv) {
 
     auto snapshots_file = std::make_shared<std::ofstream>(FLAGS_snapshots);
     auto sp1 = std::make_shared<BatchedModelPolicy>(batched_model, snapshots_file);
+    auto sp1_cached = std::make_shared<CachedPolicy>(sp1);
     auto sp2 = std::make_shared<SimplePolicy>(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
 
     Board board{FLAGS_columns, FLAGS_rows};
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
     folly::coro::blockingWait(
-        computer_play(board, sp1, sp2, FLAGS_games, {.samples = FLAGS_samples})
+        computer_play(board, sp1_cached, sp2, FLAGS_games, {.samples = FLAGS_samples})
             .scheduleOn(&thread_pool));
+
+    XLOGF(INFO, "{} cache hits, {} cache misses during play.", sp1_cached->cache_hits(),
+          sp1_cached->cache_misses());
 }

@@ -1,9 +1,11 @@
 #include "gamestate.hpp"
 
+#include <folly/Hash.h>
 #include <folly/Overload.h>
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <deque>
 #include <exception>
 #include <format>
@@ -69,6 +71,16 @@ Wall::Wall(Cell c, Direction dir) {
 
     throw std::runtime_error("Unreachable: invalid direction (wall)!");
 }
+
+namespace std {
+std::uint64_t hash<Cell>::operator()(Cell cell) const {
+    return folly::hash::hash_combine(cell.column, cell.row);
+}
+
+std::uint64_t hash<Wall>::operator()(Wall wall) const {
+    return folly::hash::hash_combine(wall.cell, wall.type);
+}
+}  // namespace std
 
 Turn Turn::next() const {
     if (action == First) {
@@ -515,4 +527,27 @@ Board::State& Board::state_at(Cell cell) {
 
 Board::State Board::state_at(Cell cell) const {
     return m_board[index_from_cell(cell)];
+}
+
+std::uint64_t Board::hash_from_pov(Player player, [[maybe_unused]] bool hash_wall_color) const {
+    // TODO: not used yet and so not supported :P
+    assert(!hash_wall_color);
+
+    std::uint64_t result = 0;
+
+    Player const opponent = other_player(player);
+    result = folly::hash::hash_combine(position(player), goal(player), position(opponent),
+                                       goal(opponent));
+
+    for (std::size_t i = 0; i < m_board.size(); ++i) {
+        if (m_board[i].has_red_right_wall || m_board[i].has_blue_right_wall) {
+            result = folly::hash::hash_combine(result, i, 1);
+        }
+
+        if (m_board[i].has_red_down_wall || m_board[i].has_blue_down_wall) {
+            result = folly::hash::hash_combine(result, i, 2);
+        }
+    }
+
+    return result;
 }

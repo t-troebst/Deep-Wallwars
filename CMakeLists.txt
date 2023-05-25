@@ -15,6 +15,7 @@ find_package(folly REQUIRED)
 add_library(core OBJECT
     src/batched_model.cpp
     src/batched_model_policy.cpp
+    src/cached_policy.cpp
     src/cuda_wrappers.cpp
     src/gamestate.cpp
     src/mcts.cpp
