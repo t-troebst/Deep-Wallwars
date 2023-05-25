@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
 
     auto snapshots_file = std::make_shared<std::ofstream>(FLAGS_snapshots);
     auto sp1 = std::make_shared<BatchedModelPolicy>(batched_model, snapshots_file);
-    auto sp1_cached = std::make_shared<CachedPolicy>(sp1);
+    auto sp1_cached = std::make_shared<CachedPolicy>(sp1, 10'000);
     auto sp2 = std::make_shared<SimplePolicy>(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
 
     Board board{FLAGS_columns, FLAGS_rows};

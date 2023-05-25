@@ -62,7 +62,7 @@ folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy>
             return computer_play_single(board, policy1, policy2, i, opts).scheduleOn(executor);
         });
 
-    auto results = co_await folly::coro::collectAllRange(game_tasks);
+    auto results = co_await folly::coro::collectAllWindowed(game_tasks, opts.max_parallel_games);
     int red_wins = 0;
     int timeouts = 0;
 
