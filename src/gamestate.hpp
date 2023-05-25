@@ -16,6 +16,8 @@ enum class Direction { Right, Down, Left, Up };
 constexpr std::array<Direction, 4> kDirections = {Direction::Right, Direction::Down,
                                                   Direction::Left, Direction::Up};
 
+[[nodiscard]] Direction flip_horizontal(Direction dir);
+
 enum class Player { Red, Blue };
 
 Player other_player(Player player);
@@ -36,6 +38,8 @@ struct Wall {
 
     Wall(Cell cell, Type type);
     Wall(Cell cell, Direction direction);
+
+    Direction direction() const;
 
     std::strong_ordering operator<=>(Wall const& other) const = default;
     bool operator==(Wall const& other) const = default;
@@ -116,7 +120,10 @@ public:
     Cell cell_at_index(int i) const;
     int index_from_cell(Cell cell) const;
 
-    std::uint64_t hash_from_pov(Player player, bool hash_wall_color = false) const;
+    std::uint64_t hash_from_pov(Player player, bool flip_horizontal = false,
+                                bool hash_wall_color = false) const;
+    [[nodiscard]] Cell flip_horizontal(Cell cell) const;
+    [[nodiscard]] Wall flip_horizontal(Wall all) const;
 
 private:
     struct State {

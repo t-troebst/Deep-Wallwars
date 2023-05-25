@@ -21,6 +21,20 @@ static constexpr std::array<char, 13> kColumnLabels = {'a', 'b', 'c', 'd', 'e', 
 static constexpr std::array<char, 10> kRowLabels = {'1', '2', '3', '4', '5',
                                                     '6', '7', '8', '9', 'X'};
 
+Direction flip_horizontal(Direction dir) {
+    switch (dir) {
+        case Direction::Right:
+            return Direction::Left;
+        case Direction::Left:
+            return Direction::Right;
+        case Direction::Down:
+        case Direction::Up:
+            return dir;
+    }
+
+    throw std::runtime_error("Unreachable: invalid direction (flip)!");
+}
+
 Player other_player(Player player) {
     switch (player) {
         case Player::Red:
@@ -70,6 +84,10 @@ Wall::Wall(Cell c, Direction dir) {
     }
 
     throw std::runtime_error("Unreachable: invalid direction (wall)!");
+}
+
+Direction Wall::direction() const {
+    return type == Wall::Down ? Direction::Down : Direction::Right;
 }
 
 namespace std {
@@ -529,23 +547,34 @@ Board::State Board::state_at(Cell cell) const {
     return m_board[index_from_cell(cell)];
 }
 
-std::uint64_t Board::hash_from_pov(Player player, [[maybe_unused]] bool hash_wall_color) const {
+Cell Board::flip_horizontal(Cell cell) const {
+    return {cell.column, m_rows - 1 - cell.row};
+}
+
+Wall Board::flip_horizontal(Wall wall) const {
+    return Wall{flip_horizontal(wall.cell), ::flip_horizontal(wall.direction())};
+}
+
+std::uint64_t Board::hash_from_pov(Player player, bool flip_hori,
+                                   [[maybe_unused]] bool hash_wall_color) const {
     // TODO: not used yet and so not supported :P
     assert(!hash_wall_color);
 
-    std::uint64_t result = 0;
+    auto const flip = [&](auto x) { return flip_hori ? flip_horizontal(x) : x; };
 
     Player const opponent = other_player(player);
-    result = folly::hash::hash_combine(position(player), goal(player), position(opponent),
-                                       goal(opponent));
+    std::uint64_t result = folly::hash::hash_combine(
+        flip(position(player)), flip(goal(player)), flip(position(opponent)), flip(goal(opponent)));
 
     for (std::size_t i = 0; i < m_board.size(); ++i) {
         if (m_board[i].has_red_right_wall || m_board[i].has_blue_right_wall) {
-            result = folly::hash::hash_combine(result, i, 1);
+            Wall wall{cell_at_index(i), Direction::Right};
+            result ^= std::hash<Wall>{}(flip(wall));
         }
 
         if (m_board[i].has_red_down_wall || m_board[i].has_blue_down_wall) {
-            result = folly::hash::hash_combine(result, i, 2);
+            Wall wall{cell_at_index(i), Direction::Down};
+            result ^= std::hash<Wall>{}(flip(wall));
         }
     }
 
