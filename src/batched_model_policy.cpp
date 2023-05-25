@@ -55,8 +55,8 @@ void BatchedModelPolicy::snapshot(TreeNode const& current_root) {
         *m_snapshot_stream << state.back() << '\n';
         std::copy(output.wall_prior.begin(), output.wall_prior.end() - 1, it);
         *m_snapshot_stream << output.wall_prior.back() << '\n';
-        std::copy(output.wall_prior.begin(), output.wall_prior.end() - 1, it);
-        *m_snapshot_stream << output.wall_prior.back() << '\n';
+        std::copy(output.step_prior.begin(), output.step_prior.end() - 1, it);
+        *m_snapshot_stream << output.step_prior.back() << '\n';
 
         TreeNode::Value val = current_root.value;
         *m_snapshot_stream << val.total_weight / val.total_samples << "\n\n";
