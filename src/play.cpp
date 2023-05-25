@@ -25,12 +25,13 @@ folly::coro::Task<Player> computer_play_single(const Board& board,
     int num_moves = 0;
 
     while (true) {
+        ++num_moves;
         for (int i = 0; i < 2; ++i) {
             co_await mcts1.sample(opts.samples);
             Action action = mcts1.commit_to_action(opts.temperature);
 
             if (mcts1.current_board().winner()) {
-                XLOGF(INFO, "Red player won game {}.", index);
+                XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
                 co_return Player::Red;
             }
 
@@ -42,16 +43,11 @@ folly::coro::Task<Player> computer_play_single(const Board& board,
             Action action = mcts2.commit_to_action(opts.temperature);
 
             if (mcts2.current_board().winner()) {
-                XLOGF(INFO, "Blue player won game {}.", index);
+                XLOGF(INFO, "Blue player won game {} in {} moves.", index, num_moves);
                 co_return Player::Blue;
             }
             mcts1.force_action(action);
         }
-
-        num_moves += 2;
-
-        XLOGF(INFO, "Game {} hit {} moves with {} samples the roots.", index, num_moves,
-              mcts1.root_samples() + mcts2.root_samples());
     }
 }
 
