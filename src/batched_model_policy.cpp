@@ -2,7 +2,7 @@
 
 #include <folly/Overload.h>
 
-#include <ranges>
+#include <algorithm>
 #include <thread>
 
 #include "model.hpp"
@@ -51,12 +51,12 @@ void BatchedModelPolicy::snapshot(TreeNode const& current_root) {
         std::lock_guard lock{m_snapshot_mutex};
         std::ostream_iterator<float> it{*m_snapshot_stream, ", "};
 
-        std::ranges::copy(state, it);
-        *m_snapshot_stream << '\n';
-        std::ranges::copy(output.wall_prior, it);
-        *m_snapshot_stream << '\n';
-        std::ranges::copy(output.step_prior, it);
-        *m_snapshot_stream << '\n';
+        std::copy(state.begin(), state.end() - 1, it);
+        *m_snapshot_stream << state.back() << '\n';
+        std::copy(output.wall_prior.begin(), output.wall_prior.end() - 1, it);
+        *m_snapshot_stream << output.wall_prior.back() << '\n';
+        std::copy(output.wall_prior.begin(), output.wall_prior.end() - 1, it);
+        *m_snapshot_stream << output.wall_prior.back() << '\n';
 
         TreeNode::Value val = current_root.value;
         *m_snapshot_stream << val.total_weight / val.total_samples << "\n\n";
