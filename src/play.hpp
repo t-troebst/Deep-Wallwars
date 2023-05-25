@@ -12,6 +12,7 @@ struct MCTSPolicy;
 struct ComputerPlayOptions {
     int threads = 4;
     int samples = 1000;
+    int move_limit = 100;
     double temperature = 0.2;
     std::uint32_t seed = 42;
 };

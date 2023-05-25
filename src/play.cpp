@@ -13,19 +13,17 @@
 
 namespace views = std::ranges::views;
 
-folly::coro::Task<Player> computer_play_single(const Board& board,
-                                               std::shared_ptr<MCTSPolicy> policy1,
-                                               std::shared_ptr<MCTSPolicy> policy2,
-                                               std::uint32_t index,
-                                               ComputerPlayOptions const& opts) {
+folly::coro::Task<std::optional<Player>> computer_play_single(const Board& board,
+                                                              std::shared_ptr<MCTSPolicy> policy1,
+                                                              std::shared_ptr<MCTSPolicy> policy2,
+                                                              std::uint32_t index,
+                                                              ComputerPlayOptions const& opts) {
     MCTS mcts1{policy1, board, {.seed = index}};
     MCTS mcts2{policy2, board, {.seed = index}};
 
     XLOGF(INFO, "Starting game {}.", index);
-    int num_moves = 0;
 
-    while (true) {
-        ++num_moves;
+    for (int num_moves = 1; opts.move_limit == 0 || num_moves <= opts.move_limit; ++num_moves) {
         for (int i = 0; i < 2; ++i) {
             co_await mcts1.sample(opts.samples);
             Action action = mcts1.commit_to_action(opts.temperature);
@@ -49,6 +47,9 @@ folly::coro::Task<Player> computer_play_single(const Board& board,
             mcts1.force_action(action);
         }
     }
+
+    XLOGF(INFO, "Game {} was ended because it hit the move limit of {}", index, opts.move_limit);
+    co_return {};  // Let's be nice and give it to the second player. :D
 }
 
 folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy> policy1,
@@ -63,14 +64,18 @@ folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy>
 
     auto results = co_await folly::coro::collectAllRange(game_tasks);
     int red_wins = 0;
+    int timeouts = 0;
 
-    for (Player player : results) {
-        if (player == Player::Red) {
+    for (std::optional<Player> player : results) {
+        if (!player) {
+            ++timeouts;
+        } else if (player == Player::Red) {
             ++red_wins;
         }
     }
 
-    XLOGF(INFO, "{} games have finished and red won {} of them.", games, red_wins);
+    XLOGF(INFO, "{}/{} games have finished and red won {} of them.", games - timeouts, games,
+          red_wins);
 
     co_return double(red_wins) / games;
 }
