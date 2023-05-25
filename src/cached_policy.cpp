@@ -13,7 +13,9 @@ CachedPolicy::CachedPolicy(std::shared_ptr<MCTSPolicy> policy, std::size_t capac
     : m_policy{std::move(policy)} {
     // Can't figure out how to do this in the constructor initializer list...
     for (std::size_t i = 0; i < shards; ++i) {
-        m_shards.emplace_back(folly::in_place, shards / capacity);
+        m_shards.emplace_back(
+            folly::in_place_t(),
+            folly::EvictingCacheMap<std::uint64_t, Evaluation>(capacity / shards));
     }
 }
 
@@ -60,7 +62,7 @@ folly::coro::Task<MCTSPolicy::Evaluation> CachedPolicy::evaluate_position(Board 
     }
 
     ++m_cache_misses;
-    Evaluation const eval = co_await m_policy->evaluate_position(board, turn, parent);
+    Evaluation eval = co_await m_policy->evaluate_position(board, turn, parent);
     lru.wlock()->insert(hash, eval);
     co_return eval;
 }
