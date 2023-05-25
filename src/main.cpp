@@ -23,6 +23,7 @@ namespace nv = nvinfer1;
 DEFINE_string(model, "model.trt", "Serialized TensorRT Model");
 DEFINE_string(snapshots, "snapshots.csv", "Output for training");
 DEFINE_uint32(seed, 42, "Random seed");
+DEFINE_uint64(cache_size, 100'000, "Size of the internal evaluation cache");
 
 DEFINE_int32(columns, 6, "Number of columns");
 DEFINE_int32(rows, 6, "Number of rows");
@@ -66,7 +67,7 @@ int main(int argc, char** argv) {
 
     auto snapshots_file = std::make_shared<std::ofstream>(FLAGS_snapshots);
     auto sp1 = std::make_shared<BatchedModelPolicy>(batched_model, snapshots_file);
-    auto sp1_cached = std::make_shared<CachedPolicy>(sp1, 10'000);
+    auto sp1_cached = std::make_shared<CachedPolicy>(sp1, FLAGS_cache_size);
     auto sp2 = std::make_shared<SimplePolicy>(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
 
     Board board{FLAGS_columns, FLAGS_rows};
