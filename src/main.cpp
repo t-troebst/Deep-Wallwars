@@ -2,10 +2,10 @@
 #include <NvInferRuntime.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/experimental/coro/BlockingWait.h>
-#include <folly/logging/LogLevel.h>
 #include <folly/logging/xlog.h>
 #include <gflags/gflags.h>
 
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -71,10 +71,14 @@ int main(int argc, char** argv) {
     Board board{FLAGS_columns, FLAGS_rows};
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
+    auto start = std::chrono::high_resolution_clock::now();
     folly::coro::blockingWait(
-        computer_play(board, sp1_cached, sp2, FLAGS_games, {.samples = FLAGS_samples})
+        computer_play(board, sp1_cached, sp1_cached, FLAGS_games, {.samples = FLAGS_samples})
             .scheduleOn(&thread_pool));
+    auto stop = std::chrono::high_resolution_clock::now();
 
     XLOGF(INFO, "{} cache hits, {} cache misses during play.", sp1_cached->cache_hits(),
           sp1_cached->cache_misses());
+    XLOGF(INFO, "Completed in {} seconds.",
+          std::chrono::duration_cast<std::chrono::seconds>(stop - start).count());
 }
