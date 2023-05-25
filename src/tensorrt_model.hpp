@@ -14,7 +14,7 @@ class IExecutionContext;
 
 class TensorRTModel : public Model {
 public:
-    TensorRTModel(nvinfer1::ICudaEngine& engine, int batch_size);
+    TensorRTModel(nvinfer1::ICudaEngine& engine);
 
     void inference(std::span<float> states, Output const& out) override;
 

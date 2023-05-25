@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<nv::IRuntime> runtime{nv::createInferRuntime(logger)};
     std::ifstream model_file(FLAGS_model, std::ios::binary);
     auto engine = load_serialized_engine(*runtime, model_file);
-    auto trt_model = std::make_unique<TensorRTModel>(*engine, 64);
+    auto trt_model = std::make_unique<TensorRTModel>(*engine);
     auto batched_model = std::make_shared<BatchedModel>(std::move(trt_model), 256);
 
     auto snapshots_file = std::make_shared<std::ofstream>(FLAGS_snapshots);

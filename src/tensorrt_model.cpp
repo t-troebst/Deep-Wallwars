@@ -7,37 +7,36 @@
 
 namespace nv = nvinfer1;
 
-TensorRTModel::TensorRTModel(nv::ICudaEngine& engine, int batch_size)
-    : m_context{engine.createExecutionContext()} {
+TensorRTModel::TensorRTModel(nv::ICudaEngine& engine) : m_context{engine.createExecutionContext()} {
     auto const states_dims = engine.getTensorShape("States");
 
-    if (states_dims.nbDims != 4 || states_dims.d[0] != batch_size) {
+    if (states_dims.nbDims != 4) {
         throw std::runtime_error("Invalid input shape for \"States\" tensor!");
     }
 
     int const columns = states_dims.d[2];
     int const rows = states_dims.d[3];
-    m_batch_size = batch_size;
+    m_batch_size = states_dims.d[0];
     m_state_size = states_dims.d[1] * columns * rows;
     m_wall_prior_size = 2 * columns * rows;
 
     auto const wall_priors_dims = engine.getTensorShape("WallPriors");
 
-    if (wall_priors_dims.nbDims != 2 || wall_priors_dims.d[0] != batch_size ||
+    if (wall_priors_dims.nbDims != 2 || wall_priors_dims.d[0] != m_batch_size ||
         wall_priors_dims.d[1] != m_wall_prior_size) {
         throw std::runtime_error("Invalid input shape for \"WallPriors\" tensor!");
     }
 
     auto const step_priors_dims = engine.getTensorShape("StepPriors");
 
-    if (step_priors_dims.nbDims != 2 || step_priors_dims.d[0] != batch_size ||
+    if (step_priors_dims.nbDims != 2 || step_priors_dims.d[0] != m_batch_size ||
         step_priors_dims.d[1] != 4) {
         throw std::runtime_error("Invalid input shape for \"StepPriors\" tensor!");
     }
 
     auto values_dims = engine.getTensorShape("Values");
 
-    if (values_dims.nbDims != 2 || values_dims.d[0] != batch_size || values_dims.d[1] != 1) {
+    if (values_dims.nbDims != 2 || values_dims.d[0] != m_batch_size || values_dims.d[1] != 1) {
         throw std::runtime_error("Invalid input shape for \"Values\" tensor!");
     }
 
