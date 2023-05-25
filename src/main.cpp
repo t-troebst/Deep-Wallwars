@@ -22,6 +22,7 @@ namespace nv = nvinfer1;
 
 DEFINE_string(model, "model.trt", "Serialized TensorRT Model");
 DEFINE_string(snapshots, "snapshots.csv", "Output for training");
+DEFINE_uint32(seed, 42, "Random seed");
 
 DEFINE_int32(columns, 6, "Number of columns");
 DEFINE_int32(rows, 6, "Number of rows");
@@ -73,7 +74,7 @@ int main(int argc, char** argv) {
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
     auto start = std::chrono::high_resolution_clock::now();
     folly::coro::blockingWait(
-        computer_play(board, sp1_cached, sp1_cached, FLAGS_games, {.samples = FLAGS_samples})
+        computer_play(board, sp1_cached, sp1_cached, FLAGS_games, {.samples = FLAGS_samples, .seed = FLAGS_seed})
             .scheduleOn(&thread_pool));
     auto stop = std::chrono::high_resolution_clock::now();
 
