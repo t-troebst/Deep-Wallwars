@@ -264,7 +264,9 @@ void MCTS::add_root_noise() {
     }
 
     for (std::size_t i = 0; i < samples.size(); ++i) {
-        m_current_root->edges[i].prior += samples[i] / total;
+        m_current_root->edges[i].prior =
+            (1 - m_opts.noise_factor) * m_current_root->edges[i].prior +
+            m_opts.noise_factor * samples[i] / total;
     }
 }
 
