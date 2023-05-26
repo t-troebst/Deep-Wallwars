@@ -94,33 +94,34 @@ std::vector<float> BatchedModelPolicy::convert_to_state(Board const& board, Turn
     return state;
 }
 
-BatchedModel::Output BatchedModelPolicy::convert_to_output(NodeInfo const& node_info, std::optional<Player> winner) const {
+BatchedModel::Output BatchedModelPolicy::convert_to_output(NodeInfo const& node_info,
+                                                           std::optional<Player> winner) const {
     std::size_t board_size = node_info.board.columns() * node_info.board.rows();
 
     std::vector<float> wall_prior(2 * board_size);
     std::array<float, 4> step_prior{};
 
-    int child_samples = 0;
+    // Note: the sum of samples in the children is not equal to the sum of samples in the parent
+    // because some samples *end* in the parent. *Typically* only one sample does but due to the
+    // depth limit, it can happen that more do.
+    int total_samples = 0;
+    for (EdgeInfo const& edge_info : node_info.edges) {
+        total_samples += edge_info.num_samples;
+    }
 
     for (EdgeInfo const& edge_info : node_info.edges) {
         if (!edge_info.num_samples) {
             continue;
         }
 
-        child_samples += edge_info.num_samples;
-        float prior = float(edge_info.num_samples) / node_info.num_samples;
+        float prior = float(edge_info.num_samples) / total_samples;
 
         folly::variant_match(
             edge_info.action, [&](Direction dir) { step_prior[int(dir)] = prior; },
             [&](Wall wall) {
-                wall_prior[int(wall.type) * board_size + node_info.board.index_from_cell(wall.cell)] =
-                    prior;
+                wall_prior[int(wall.type) * board_size +
+                           node_info.board.index_from_cell(wall.cell)] = prior;
             });
-    }
-
-    if (child_samples != node_info.num_samples) {
-        XLOGF(ERR, "{} samples at children but {} samples at root!", child_samples,
-              node_info.num_samples);
     }
 
     float const z_value = winner ? (*winner == node_info.turn.player ? 1 : -1) : 0;
