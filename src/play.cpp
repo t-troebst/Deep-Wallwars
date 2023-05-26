@@ -30,6 +30,8 @@ folly::coro::Task<std::optional<Player>> computer_play_single(const Board& board
 
             if (mcts1.current_board().winner()) {
                 XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
+                mcts1.snapshot(Player::Red);
+                mcts2.snapshot(Player::Red);
                 co_return Player::Red;
             }
 
@@ -42,14 +44,19 @@ folly::coro::Task<std::optional<Player>> computer_play_single(const Board& board
 
             if (mcts2.current_board().winner()) {
                 XLOGF(INFO, "Blue player won game {} in {} moves.", index, num_moves);
+                mcts1.snapshot(Player::Blue);
+                mcts2.snapshot(Player::Blue);
                 co_return Player::Blue;
             }
+
             mcts1.force_action(action);
         }
     }
 
     XLOGF(INFO, "Game {} was ended because it hit the move limit of {}", index, opts.move_limit);
-    co_return {};  // Let's be nice and give it to the second player. :D
+    mcts1.snapshot({});
+    mcts1.snapshot({});
+    co_return {};
 }
 
 folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy> policy1,

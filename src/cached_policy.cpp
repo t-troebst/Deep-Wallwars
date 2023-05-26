@@ -3,7 +3,7 @@
 #include <folly/Hash.h>
 #include <folly/Overload.h>
 
-std::uint64_t position_hash(Board const& board, Turn turn, TreeNode const*, bool flip_horizontal) {
+std::uint64_t position_hash(Board const& board, Turn turn, bool flip_horizontal) {
     return folly::hash::hash_128_to_64(board.hash_from_pov(turn.player, flip_horizontal),
                                        turn.action);
 }
@@ -36,9 +36,8 @@ void flip_evaluation(Board const& board, MCTSPolicy::Evaluation& eval) {
 }
 
 folly::coro::Task<MCTSPolicy::Evaluation> CachedPolicy::evaluate_position(Board const& board,
-                                                                          Turn turn,
-                                                                          TreeNode const* parent) {
-    auto const hash = position_hash(board, turn, parent, false);
+                                                                          Turn turn) {
+    auto const hash = position_hash(board, turn, false);
     auto& lru = m_shards[hash % m_shards.size()];
 
     {
@@ -49,7 +48,7 @@ folly::coro::Task<MCTSPolicy::Evaluation> CachedPolicy::evaluate_position(Board 
         }
     }
 
-    auto const flipped_hash = position_hash(board, turn, parent, true);
+    auto const flipped_hash = position_hash(board, turn, true);
     auto& flipped_lru = m_shards[flipped_hash % m_shards.size()];
     {
         auto lock = flipped_lru.wlock();
@@ -62,11 +61,11 @@ folly::coro::Task<MCTSPolicy::Evaluation> CachedPolicy::evaluate_position(Board 
     }
 
     ++m_cache_misses;
-    Evaluation eval = co_await m_policy->evaluate_position(board, turn, parent);
+    Evaluation eval = co_await m_policy->evaluate_position(board, turn);
     lru.wlock()->insert(hash, eval);
     co_return eval;
 }
 
-void CachedPolicy::snapshot(TreeNode const& current_root) {
-    m_policy->snapshot(current_root);
+void CachedPolicy::snapshot(NodeInfo const& node_info, std::optional<Player> winner) {
+    m_policy->snapshot(node_info, winner);
 }

@@ -1,9 +1,10 @@
 #pragma once
 
+#include <folly/Synchronized.h>
+#include <folly/container/EvictingCacheMap.h>
+
 #include <atomic>
 #include <thread>
-#include <folly/container/EvictingCacheMap.h>
-#include <folly/Synchronized.h>
 
 #include "mcts.hpp"
 
@@ -12,9 +13,8 @@ public:
     CachedPolicy(std::shared_ptr<MCTSPolicy> policy, std::size_t capacity,
                  std::size_t shards = std::thread::hardware_concurrency());
 
-    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
-                                                    TreeNode const* parent) override;
-    void snapshot(TreeNode const& current_root) override;
+    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) override;
+    void snapshot(NodeInfo const& node_info, std::optional<Player> winner) override;
 
     int cache_hits() const;
     int cache_misses() const;

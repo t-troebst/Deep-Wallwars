@@ -11,10 +11,9 @@ public:
     BatchedModelPolicy(std::shared_ptr<BatchedModel> model,
                        std::shared_ptr<std::ostream> snapshot_stream = nullptr);
 
-    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
-                                                    TreeNode const* parent) override;
+    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) override;
 
-    void snapshot(TreeNode const& current_root) override;
+    void snapshot(NodeInfo const& node_info, std::optional<Player> winner) override;
 
 private:
     std::shared_ptr<BatchedModel> m_model;
@@ -22,5 +21,6 @@ private:
     std::mutex m_snapshot_mutex;
 
     std::vector<float> convert_to_state(Board const& bord, Turn turn) const;
-    BatchedModel::Output convert_to_output(TreeNode const& node) const;
+    BatchedModel::Output convert_to_output(NodeInfo const& node_info,
+                                           std::optional<Player> player) const;
 };

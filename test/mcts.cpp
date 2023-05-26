@@ -16,8 +16,7 @@
 struct RightPolicy : MCTSPolicy {
     int samples = 0;
 
-    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
-                                                    TreeNode const*) override {
+    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) override {
         ++samples;
         if (board.is_blocked(Wall{board.position(turn.player), Direction::Right})) {
             co_return Evaluation{0, {}};
@@ -93,8 +92,7 @@ TEST_CASE("Sample many", "[MCTS]") {
 struct SlowRightPolicy : MCTSPolicy {
     std::atomic<int> samples = 0;
 
-    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
-                                                    TreeNode const*) override {
+    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) override {
         ++samples;
         co_await folly::coro::sleep(std::chrono::milliseconds{250});
         Evaluation result;

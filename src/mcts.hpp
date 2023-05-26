@@ -40,15 +40,28 @@ struct TreeNode {
     void add_sample(float weight);
 };
 
+struct EdgeInfo {
+    Action action;
+    int num_samples;
+};
+
+struct NodeInfo {
+    Board board;
+    Turn turn;
+    float q_value;
+    int num_samples;
+
+    std::vector<EdgeInfo> edges;
+};
+
 struct MCTSPolicy {
     struct Evaluation {
         float value;
         std::vector<TreeEdge> edges;
     };
 
-    virtual folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn,
-                                                            TreeNode const* parent) = 0;
-    virtual void snapshot(TreeNode const& current_root);
+    virtual folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) = 0;
+    virtual void snapshot(NodeInfo const& current_root, std::optional<Player> winner);
 
     MCTSPolicy() = default;
 
@@ -80,6 +93,8 @@ public:
     Board const& current_board() const;
     float root_value() const;
     int root_samples() const;
+    NodeInfo root_info() const;
+    std::vector<NodeInfo> const& history() const;
     int wasted_inferences() const;
 
     folly::coro::Task<float> sample(int iterations);
@@ -93,16 +108,18 @@ public:
     void force_action(Action const& action);
     void force_move(Move const& move);
 
+    void snapshot(std::optional<Player> winner);
+
     ~MCTS();
 
 private:
     std::shared_ptr<MCTSPolicy> m_policy;
     TreeNode* m_root;
-    TreeNode* m_current_root;
     Options m_opts;
     std::gamma_distribution<float> m_gamma_dist;
     std::mt19937_64 m_twister;
     std::atomic<int> m_wasted_inferences = 0;
+    std::vector<NodeInfo> m_history;
 
     void add_root_noise();
     folly::coro::Task<void> single_sample();
@@ -110,6 +127,7 @@ private:
     folly::coro::Task<float> initialize_child(TreeNode& current, TreeEdge& edge);
     folly::coro::Task<float> sample_rec(TreeNode& current);
     void delete_subtree(TreeNode& node);
+    void move_root(TreeEdge const& edge);
 
     folly::coro::Task<TreeNode*> create_tree_node(Board board, Turn turn, TreeNode* parent);
 };

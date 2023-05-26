@@ -37,7 +37,7 @@ void TreeNode::add_sample(float weight) {
     } while (!value.compare_exchange_weak(old_val, new_val));
 }
 
-void MCTSPolicy::snapshot(TreeNode const&) {}
+void MCTSPolicy::snapshot(NodeInfo const&, std::optional<Player>) {}
 
 MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
     : MCTS{std::move(policy), std::move(board), {}} {}
@@ -45,7 +45,6 @@ MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
 MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
     : m_policy{std::move(policy)},
       m_root{folly::coro::blockingWait(create_tree_node(board, options.starting_turn, nullptr))},
-      m_current_root{m_root},
       m_opts{options},
       m_gamma_dist{options.direchlet_alpha, 1.0},
       m_twister{options.seed} {
@@ -53,8 +52,8 @@ MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
 }
 
 folly::coro::Task<float> MCTS::sample(int samples) {
-    auto sample_tasks = views::iota(0, samples) |
-                        views::transform([&](int) { return sample_rec(*m_current_root); });
+    auto sample_tasks =
+        views::iota(0, samples) | views::transform([&](int) { return sample_rec(*m_root); });
 
     co_await folly::coro::collectAllWindowed(sample_tasks, m_opts.max_parallelism);
 
@@ -107,7 +106,6 @@ folly::coro::Task<float> MCTS::initialize_child(TreeNode& current, TreeEdge& edg
 
     if (!edge.child.compare_exchange_strong(child, new_node)) {
         ++m_wasted_inferences;
-        child->add_sample(value);
         delete new_node;
     }
 
@@ -121,7 +119,7 @@ folly::coro::Task<float> MCTS::sample_rec(TreeNode& current) {
         co_return value;
     }
 
-    if (current.depth - m_current_root->depth >= m_opts.max_depth) {
+    if (current.depth - m_root->depth >= m_opts.max_depth) {
         float value = current.board.score_for(current.turn.player);
         current.add_sample(value);
         co_return value;
@@ -147,70 +145,66 @@ folly::coro::Task<float> MCTS::sample_rec(TreeNode& current) {
     co_return value;
 }
 
-Action MCTS::commit_to_action() {
-    m_policy->snapshot(*m_current_root);
+void MCTS::move_root(TreeEdge const& edge) {
+    m_history.push_back(root_info());
 
-    if (m_current_root->edges.empty()) {
+    for (TreeEdge& te2 : m_root->edges) {
+        TreeNode* child = te2.child;
+        if (child && child != edge.child) {
+            delete_subtree(*child);
+        }
+    }
+
+    TreeNode* old_root = m_root;
+    m_root = edge.child;
+    delete old_root;
+    add_root_noise();
+}
+
+Action MCTS::commit_to_action() {
+    if (m_root->edges.empty()) {
         throw std::runtime_error("No action available!");
     }
 
-    TreeEdge const& te =
-        *std::ranges::max_element(m_current_root->edges, {}, [&](TreeEdge const& te) {
-            return te.child ? te.child.load()->value.load().total_samples : 0;
-        });
+    TreeEdge const& te = *std::ranges::max_element(m_root->edges, {}, [&](TreeEdge const& te) {
+        return te.child ? te.child.load()->value.load().total_samples : 0;
+    });
 
     if (!te.child) {
         throw std::runtime_error("No explored action available!");
     }
 
-    for (TreeEdge& te2 : m_current_root->edges) {
-        if (te2.child && te2.child != te.child) {
-            delete_subtree(*te2.child);
-            te2.child = nullptr;
-        }
-    }
-
-    m_current_root = te.child;
-    return te.action;
+    Action result = te.action;
+    move_root(te);  // invalidates reference to te!
+    return result;
 }
 
 Action MCTS::commit_to_action(float temperature) {
-    m_policy->snapshot(*m_current_root);
-
-    if (m_current_root->edges.empty()) {
+    if (m_root->edges.empty()) {
         throw std::runtime_error("No action available!");
     }
 
-    auto const weights =
-        std::ranges::views::transform(m_current_root->edges, [&](TreeEdge const& te) {
-            return te.child
-                       ? std::pow(te.child.load()->value.load().total_samples, 1.0 / temperature)
-                       : 0;
-        });
+    auto const weights = std::ranges::views::transform(m_root->edges, [&](TreeEdge const& te) {
+        return te.child ? std::pow(te.child.load()->value.load().total_samples, 1.0 / temperature)
+                        : 0;
+    });
 
     std::discrete_distribution<std::size_t> weight_dist(weights.begin(), weights.end());
-    TreeEdge const& te = m_current_root->edges[weight_dist(m_twister)];
+    TreeEdge const& te = m_root->edges[weight_dist(m_twister)];
 
     if (!te.child) {
         throw std::runtime_error("No explored action available!");
     }
 
-    for (TreeEdge& te2 : m_current_root->edges) {
-        if (te2.child && te2.child != te.child) {
-            delete_subtree(*te2.child);
-            te2.child = nullptr;
-        }
-    }
-
-    m_current_root = te.child;
-    add_root_noise();
-    return te.action;
+    Action result = te.action;
+    move_root(te);  // invalidates reference to te!
+    return result;
 }
 
 Move MCTS::commit_to_move() {
     Move result{commit_to_action(), {}};
 
-    if (!m_current_root->board.winner()) {
+    if (!m_root->board.winner()) {
         result.second = commit_to_action();
     }
 
@@ -220,7 +214,7 @@ Move MCTS::commit_to_move() {
 Move MCTS::commit_to_move(float temperature) {
     Move result{commit_to_action(temperature), {}};
 
-    if (!m_current_root->board.winner()) {
+    if (!m_root->board.winner()) {
         result.second = commit_to_action(temperature);
     }
 
@@ -229,27 +223,26 @@ Move MCTS::commit_to_move(float temperature) {
 
 void MCTS::force_action(Action const& action) {
     auto const te_it = std::ranges::find_if(
-        m_current_root->edges, [&](TreeEdge const& te) { return action == te.action; });
+        m_root->edges, [&](TreeEdge const& te) { return action == te.action; });
 
-    if (te_it == m_current_root->edges.end()) {
+    if (te_it == m_root->edges.end()) {
         throw std::runtime_error("Could not find action - not legal?");
     }
 
     if (!te_it->child) {
-        Board board = m_current_root->board;
-        board.do_action(m_current_root->turn.player, action);
+        Board board = m_root->board;
+        board.do_action(m_root->turn.player, action);
         te_it->child = folly::coro::blockingWait(
-            create_tree_node(std::move(board), m_current_root->turn.next(), m_current_root));
+            create_tree_node(std::move(board), m_root->turn.next(), m_root));
     }
 
-    m_current_root = te_it->child;
-    add_root_noise();
+    move_root(*te_it);
 }
 
 void MCTS::force_move(Move const& move) {
     force_action(move.first);
 
-    if (!m_current_root->board.winner()) {
+    if (!m_root->board.winner()) {
         force_action(move.second);
     }
 }
@@ -257,21 +250,20 @@ void MCTS::force_move(Move const& move) {
 void MCTS::add_root_noise() {
     float total = 0.0;
 
-    std::vector<float> samples(m_current_root->edges.size());
+    std::vector<float> samples(m_root->edges.size());
 
     for (float& s : samples) {
         total += s = m_gamma_dist(m_twister);
     }
 
     for (std::size_t i = 0; i < samples.size(); ++i) {
-        m_current_root->edges[i].prior =
-            (1 - m_opts.noise_factor) * m_current_root->edges[i].prior +
-            m_opts.noise_factor * samples[i] / total;
+        m_root->edges[i].prior = (1 - m_opts.noise_factor) * m_root->edges[i].prior +
+                                 m_opts.noise_factor * samples[i] / total;
     }
 }
 
 folly::coro::Task<TreeNode*> MCTS::create_tree_node(Board board, Turn turn, TreeNode* parent) {
-    MCTSPolicy::Evaluation eval = co_await m_policy->evaluate_position(board, turn, parent);
+    MCTSPolicy::Evaluation eval = co_await m_policy->evaluate_position(board, turn);
     TreeNode* result = new TreeNode{parent,
                                     std::move(board),
                                     turn,
@@ -280,6 +272,13 @@ folly::coro::Task<TreeNode*> MCTS::create_tree_node(Board board, Turn turn, Tree
                                     std::move(eval.edges)};
 
     co_return result;
+}
+
+void MCTS::snapshot(std::optional<Player> winner) {
+    for (NodeInfo const& ni : m_history) {
+        m_policy->snapshot(ni, winner);
+    }
+    m_policy->snapshot(root_info(), winner);
 }
 
 MCTS::~MCTS() {
@@ -304,16 +303,34 @@ void MCTS::delete_subtree(TreeNode& tn) {
 }
 
 Board const& MCTS::current_board() const {
-    return m_current_root->board;
+    return m_root->board;
 }
 
 float MCTS::root_value() const {
-    TreeNode::Value val = m_current_root->value;
+    TreeNode::Value val = m_root->value;
     return val.total_weight / val.total_samples;
 }
 
 int MCTS::root_samples() const {
-    return m_current_root->value.load().total_samples;
+    return m_root->value.load().total_samples;
+}
+
+NodeInfo MCTS::root_info() const {
+    TreeNode::Value const val = m_root->value;
+    NodeInfo result{
+        m_root->board, m_root->turn, val.total_weight / val.total_samples, val.total_samples, {}};
+    result.edges.reserve(m_root->edges.size());
+
+    for (TreeEdge const& edge : m_root->edges) {
+        TreeNode* child = edge.child;
+        result.edges.emplace_back(edge.action, child ? child->value.load().total_samples : 0);
+    }
+
+    return result;
+}
+
+std::vector<NodeInfo> const& MCTS::history() const {
+    return m_history;
 }
 
 int MCTS::wasted_inferences() const {
