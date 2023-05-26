@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <thread>
+#include <vector>
 
 struct Model;
 
@@ -19,6 +20,8 @@ public:
 
     BatchedModel(std::unique_ptr<Model> model);
     BatchedModel(std::unique_ptr<Model> model, int queue_size);
+    BatchedModel(std::vector<std::unique_ptr<Model>> models);
+    BatchedModel(std::vector<std::unique_ptr<Model>> models, int queue_size);
 
     ~BatchedModel();
 
@@ -36,9 +39,9 @@ private:
         folly::Promise<Output> output;
     };
 
+    std::vector<std::jthread> m_workers;
     folly::MPMCQueue<InferenceTask> m_tasks;
-    std::unique_ptr<Model> m_model;
-    std::jthread m_worker;
+    std::vector<std::unique_ptr<Model>> m_models;
 
-    void run_worker();
+    void run_worker(std::size_t idx);
 };

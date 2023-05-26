@@ -10,14 +10,23 @@ constexpr int kDefaultBatchesInQueue = 16;
 BatchedModel::BatchedModel(std::unique_ptr<Model> model)
     : BatchedModel{std::move(model), kDefaultBatchesInQueue * model->batch_size()} {}
 
-BatchedModel::BatchedModel(std::unique_ptr<Model> model, int queue_size)
-    : m_tasks(queue_size), m_model{std::move(model)} {
-    m_worker = std::jthread{std::bind_front(&BatchedModel::run_worker, this)};
+BatchedModel::BatchedModel(std::unique_ptr<Model> model, int queue_size) : m_tasks(queue_size) {
+    m_models.push_back(std::move(model));
+    m_workers.emplace_back([&] { run_worker(0); });
+}
+
+BatchedModel::BatchedModel(std::vector<std::unique_ptr<Model>> models, int queue_size)
+    : m_workers{}, m_tasks(queue_size), m_models{std::move(models)} {
+    for (std::size_t i = 0; i < m_models.size(); ++i) {
+        m_workers.push_back(std::jthread{[this, i] { run_worker(i); }});
+    }
 }
 
 BatchedModel::~BatchedModel() {
-    // Sentinel value so the worker stops (eventually)
-    m_tasks.blockingWrite(InferenceTask{});
+    // Sentinel values so the workers stop (eventually)
+    for (std::size_t i = 0; i < m_workers.size(); ++i) {
+        m_tasks.blockingWrite(InferenceTask{});
+    }
 }
 
 folly::SemiFuture<BatchedModel::Output> BatchedModel::inference(std::vector<float> states) {
@@ -29,15 +38,15 @@ folly::SemiFuture<BatchedModel::Output> BatchedModel::inference(std::vector<floa
     return result;
 }
 
-void BatchedModel::run_worker() {
+void BatchedModel::run_worker(std::size_t idx) {
     std::vector<folly::Promise<Output>> dequeued_promises;
-    std::vector<float> states(m_model->batch_size() * m_model->state_size());
-    std::vector<float> wall_priors(m_model->batch_size() * m_model->wall_prior_size());
-    std::vector<float> step_priors(m_model->batch_size() * 4);
-    std::vector<float> values(m_model->batch_size());
+    std::vector<float> states(m_models[idx]->batch_size() * m_models[idx]->state_size());
+    std::vector<float> wall_priors(m_models[idx]->batch_size() * m_models[idx]->wall_prior_size());
+    std::vector<float> step_priors(m_models[idx]->batch_size() * 4);
+    std::vector<float> values(m_models[idx]->batch_size());
 
     while (true) {
-        for (int i = 0; i < m_model->batch_size(); ++i) {
+        for (int i = 0; i < m_models[idx]->batch_size(); ++i) {
             InferenceTask task;
 
             if (i == 0) {
@@ -50,16 +59,16 @@ void BatchedModel::run_worker() {
                 return;
             }
 
-            std::ranges::copy(task.state, states.begin() + m_model->state_size() * i);
+            std::ranges::copy(task.state, states.begin() + m_models[idx]->state_size() * i);
             dequeued_promises.push_back(std::move(task.output));
         }
 
-        m_model->inference(states, {wall_priors, step_priors, values});
+        m_models[idx]->inference(states, {wall_priors, step_priors, values});
 
         for (std::size_t i = 0; i < dequeued_promises.size(); ++i) {
             std::vector<float> wall_prior{
-                wall_priors.begin() + m_model->wall_prior_size() * i,
-                wall_priors.begin() + m_model->wall_prior_size() * (i + 1)};
+                wall_priors.begin() + m_models[idx]->wall_prior_size() * i,
+                wall_priors.begin() + m_models[idx]->wall_prior_size() * (i + 1)};
             std::array<float, 4> step_prior;
             std::copy_n(step_priors.begin() + 4 * i, 4, step_prior.begin());
 
