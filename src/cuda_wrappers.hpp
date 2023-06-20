@@ -4,6 +4,13 @@
 
 #include <optional>
 #include <span>
+#include <stdexcept>
+
+class CudaException : public std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
+void cuda_check(cudaError_t err);
 
 class CudaStream {
 public:
@@ -43,7 +50,7 @@ public:
 
     void to_device(std::span<T> in, CudaStream& stream);
     void to_host(std::span<T> out, CudaStream& stream);
-    
+
 private:
     T* m_device_ptr;
     std::size_t m_size;
