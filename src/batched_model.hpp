@@ -33,6 +33,9 @@ public:
 
     folly::SemiFuture<Output> inference(std::vector<float> state);
 
+    std::size_t total_inferences() const;
+    std::size_t total_batches() const;
+
 private:
     struct InferenceTask {
         std::vector<float> state;
@@ -42,6 +45,9 @@ private:
     std::vector<std::jthread> m_workers;
     folly::MPMCQueue<InferenceTask> m_tasks;
     std::vector<std::unique_ptr<Model>> m_models;
+
+    std::atomic<std::size_t> m_batches = 0;
+    std::atomic<std::size_t> m_inferences = 0;
 
     void run_worker(std::size_t idx);
 };

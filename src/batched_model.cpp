@@ -38,6 +38,14 @@ folly::SemiFuture<BatchedModel::Output> BatchedModel::inference(std::vector<floa
     return result;
 }
 
+std::size_t BatchedModel::total_inferences() const {
+    return m_inferences;
+}
+
+std::size_t BatchedModel::total_batches() const {
+    return m_batches;
+}
+
 void BatchedModel::run_worker(std::size_t idx) {
     std::vector<folly::Promise<Output>> dequeued_promises;
     std::vector<float> states(m_models[idx]->batch_size() * m_models[idx]->state_size());
@@ -74,6 +82,9 @@ void BatchedModel::run_worker(std::size_t idx) {
 
             dequeued_promises[i].setValue(Output{std::move(wall_prior), step_prior, values[i]});
         }
+
+        m_batches += 1;
+        m_inferences += dequeued_promises.size();
 
         dequeued_promises.clear();
     }

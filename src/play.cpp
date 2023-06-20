@@ -13,7 +13,12 @@
 
 namespace views = std::ranges::views;
 
-folly::coro::Task<std::optional<Player>> computer_play_single(const Board& board,
+struct GameResult {
+    std::optional<Player> winner;
+    int wasted_inferences;
+};
+
+folly::coro::Task<GameResult> computer_play_single(const Board& board,
                                                               std::shared_ptr<MCTSPolicy> policy1,
                                                               std::shared_ptr<MCTSPolicy> policy2,
                                                               std::uint32_t index,
@@ -32,7 +37,7 @@ folly::coro::Task<std::optional<Player>> computer_play_single(const Board& board
                 XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
                 mcts1.snapshot(Player::Red);
                 mcts2.snapshot(Player::Red);
-                co_return Player::Red;
+                co_return {Player::Red, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
             }
 
             mcts2.force_action(action);
@@ -46,7 +51,7 @@ folly::coro::Task<std::optional<Player>> computer_play_single(const Board& board
                 XLOGF(INFO, "Blue player won game {} in {} moves.", index, num_moves);
                 mcts1.snapshot(Player::Blue);
                 mcts2.snapshot(Player::Blue);
-                co_return Player::Blue;
+                co_return {Player::Blue, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
             }
 
             mcts1.force_action(action);
@@ -55,8 +60,8 @@ folly::coro::Task<std::optional<Player>> computer_play_single(const Board& board
 
     XLOGF(INFO, "Game {} was ended because it hit the move limit of {}", index, opts.move_limit);
     mcts1.snapshot({});
-    mcts1.snapshot({});
-    co_return {};
+    mcts2.snapshot({});
+    co_return {{}, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
 }
 
 folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy> policy1,
@@ -72,17 +77,21 @@ folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy>
     auto results = co_await folly::coro::collectAllWindowed(game_tasks, opts.max_parallel_games);
     int red_wins = 0;
     int timeouts = 0;
+    int wasted_inferences = 0;
 
-    for (std::optional<Player> player : results) {
-        if (!player) {
+    for (GameResult result : results) {
+        if (!result.winner) {
             ++timeouts;
-        } else if (player == Player::Red) {
+        } else if (result.winner == Player::Red) {
             ++red_wins;
         }
+
+        wasted_inferences += result.wasted_inferences;
     }
 
     XLOGF(INFO, "{}/{} games have finished and red won {} of them.", games - timeouts, games,
           red_wins);
+    XLOGF(INFO, "{} inferences were wasted.", wasted_inferences);
 
     co_return double(red_wins) / games;
 }

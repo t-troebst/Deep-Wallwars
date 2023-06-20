@@ -98,6 +98,11 @@ int main(int argc, char** argv) {
 
     XLOGF(INFO, "{} cache hits, {} cache misses during play.", sp1_cached->cache_hits(),
           sp1_cached->cache_misses());
+    auto inferences = batched_model->total_inferences();
+    auto batches = batched_model->total_batches();
+    XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", inferences, batches,
+          double(inferences) / batches);
+
     XLOGF(INFO, "Completed in {} seconds.",
           std::chrono::duration_cast<std::chrono::seconds>(stop - start).count());
 }
