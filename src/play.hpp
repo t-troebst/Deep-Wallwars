@@ -13,6 +13,7 @@ struct ComputerPlayOptions {
     int threads = 4;
     int samples = 1000;
     int max_parallel_games = 128;
+    int max_parallel_samples = 16;
     int move_limit = 100;
     double temperature = 0.2;
     std::uint32_t seed = 42;

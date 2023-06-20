@@ -19,12 +19,12 @@ struct GameResult {
 };
 
 folly::coro::Task<GameResult> computer_play_single(const Board& board,
-                                                              std::shared_ptr<MCTSPolicy> policy1,
-                                                              std::shared_ptr<MCTSPolicy> policy2,
-                                                              std::uint32_t index,
-                                                              ComputerPlayOptions const& opts) {
-    MCTS mcts1{policy1, board, {.seed = index}};
-    MCTS mcts2{policy2, board, {.seed = index}};
+                                                   std::shared_ptr<MCTSPolicy> policy1,
+                                                   std::shared_ptr<MCTSPolicy> policy2,
+                                                   std::uint32_t index,
+                                                   ComputerPlayOptions const& opts) {
+    MCTS mcts1{policy1, board, {.max_parallelism = opts.max_parallel_samples, .seed = index}};
+    MCTS mcts2{policy2, board, {.max_parallelism = opts.max_parallel_samples, .seed = index}};
 
     XLOGF(INFO, "Starting game {}.", index);
 
