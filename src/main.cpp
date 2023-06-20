@@ -55,6 +55,16 @@ struct Logger : nv::ILogger {
     }
 };
 
+std::vector<std::unique_ptr<Model>> get_models(nv::ICudaEngine& engine, int n) {
+    std::vector<std::unique_ptr<Model>> result;
+
+    for (int i = 0; i < n; ++i) {
+        result.push_back(std::make_unique<TensorRTModel>(engine));
+    }
+
+    return result;
+}
+
 int main(int argc, char** argv) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -62,8 +72,15 @@ int main(int argc, char** argv) {
     std::unique_ptr<nv::IRuntime> runtime{nv::createInferRuntime(logger)};
     std::ifstream model_file(FLAGS_model, std::ios::binary);
     auto engine = load_serialized_engine(*runtime, model_file);
-    auto trt_model = std::make_unique<TensorRTModel>(*engine);
-    auto batched_model = std::make_shared<BatchedModel>(std::move(trt_model), 256);
+    auto trt_models = get_models(*engine, 3);
+
+    // For some reason, the second model created by TensorRT is misaligned in GPU memory. This is an
+    // extremely ridiculous work-around. Nvidia what the hell?
+    std::vector<std::unique_ptr<Model>> safe_models;
+    safe_models.push_back(std::move(trt_models[0]));
+    safe_models.push_back(std::move(trt_models[2]));
+
+    auto batched_model = std::make_shared<BatchedModel>(std::move(safe_models), 1024);
 
     auto snapshots_file = std::make_shared<std::ofstream>(FLAGS_snapshots);
     auto sp1 = std::make_shared<BatchedModelPolicy>(batched_model, snapshots_file);
@@ -74,9 +91,9 @@ int main(int argc, char** argv) {
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
     auto start = std::chrono::high_resolution_clock::now();
-    folly::coro::blockingWait(
-        computer_play(board, sp1_cached, sp1_cached, FLAGS_games, {.samples = FLAGS_samples, .seed = FLAGS_seed})
-            .scheduleOn(&thread_pool));
+    folly::coro::blockingWait(computer_play(board, sp1_cached, sp1_cached, FLAGS_games,
+                                            {.samples = FLAGS_samples, .seed = FLAGS_seed})
+                                  .scheduleOn(&thread_pool));
     auto stop = std::chrono::high_resolution_clock::now();
 
     XLOGF(INFO, "{} cache hits, {} cache misses during play.", sp1_cached->cache_hits(),
