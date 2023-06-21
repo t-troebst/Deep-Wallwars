@@ -68,14 +68,16 @@ std::vector<float> BatchedModelPolicy::convert_to_state(Board const& board, Turn
     std::size_t board_size = board.columns() * board.rows();
     std::vector<float> state(7 * board_size);
 
-    board.fill_relative_distances(board.position(turn.player), {state.begin(), board_size});
-    board.fill_relative_distances(board.goal(turn.player),
-                                  {state.begin() + board_size, board_size});
+    auto blocked_directions = board.blocked_directions();
+    board.fill_relative_distances(board.position(turn.player), {state.begin(), board_size},
+                                  blocked_directions);
+    board.fill_relative_distances(board.goal(turn.player), {state.begin() + board_size, board_size},
+                                  blocked_directions);
 
     board.fill_relative_distances(board.position(other_player(turn.player)),
-                                  {state.begin() + 2 * board_size, board_size});
+                                  {state.begin() + 2 * board_size, board_size}, blocked_directions);
     board.fill_relative_distances(board.goal(other_player(turn.player)),
-                                  {state.begin() + 3 * board_size, board_size});
+                                  {state.begin() + 3 * board_size, board_size}, blocked_directions);
 
     for (int column = 0; column < board.columns(); ++column) {
         for (int row = 0; row < board.rows(); ++row) {

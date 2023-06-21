@@ -515,6 +515,52 @@ void Board::fill_relative_distances(Cell start, std::span<float> dists) const {
     }
 }
 
+std::vector<std::array<bool, 4>> Board::blocked_directions() const {
+    std::vector<std::array<bool, 4>> result(m_columns * m_rows);
+
+    for (int i = 0; i < m_columns * m_rows; ++i) {
+        Cell cell = cell_at_index(i);
+
+        for (Direction dir : kDirections) {
+            result[i][int(dir)] = is_blocked({cell, dir});
+        }
+    }
+
+    return result;
+}
+
+void Board::fill_relative_distances(Cell start, std::span<float> dists,
+                                    std::vector<std::array<bool, 4>> const& blocked_dirs) const {
+    if (int(dists.size()) != m_columns * m_rows) {
+        throw std::runtime_error("dists size does not match!");
+    }
+
+    std::ranges::fill(dists, 1.0f);
+
+    std::deque<std::pair<Cell, int>> queue = {{start, 0}};
+
+    while (!queue.empty()) {
+        auto const [top, dist] = queue.front();
+        queue.pop_front();
+
+        int i = index_from_cell(top);
+
+        dists[i] = float(dist) / (m_columns * m_rows);
+
+        for (Direction dir : kDirections) {
+            if (blocked_dirs[i][int(dir)]) {
+                continue;
+            }
+
+            Cell const neighbor = top.step(dir);
+
+            if (dists[index_from_cell(neighbor)] == 1.0f) {
+                queue.push_back({neighbor, dist + 1});
+            }
+        }
+    }
+}
+
 Cell Board::cell_at_index(int i) const {
     return {i / m_rows, i % m_rows};
 }
