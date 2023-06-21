@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
     safe_models.push_back(std::move(trt_models[0]));
     safe_models.push_back(std::move(trt_models[2]));
 
-    auto batched_model = std::make_shared<BatchedModel>(std::move(safe_models), 1024);
+    auto batched_model = std::make_shared<BatchedModel>(std::move(safe_models), 4096);
 
     auto snapshots_file = std::make_shared<std::ofstream>(FLAGS_snapshots);
     auto sp1 = std::make_shared<BatchedModelPolicy>(batched_model, snapshots_file);
