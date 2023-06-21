@@ -10,7 +10,8 @@ rows = 6
 channels = 64
 layers = 10
 epochs = 2
-batch_size = 64
+training_batch_size = 64
+inference_batch_size = 256
 
 data_folder = sys.argv[1]
 models_folder = sys.argv[2]
@@ -48,7 +49,7 @@ def save_model(model, folder):
     torch.save(model, f"{folder}/model_{generation}.pt")
     input_names = ["States"]
     output_names = ["WallPriors", "StepPriors", "Values"]
-    dummy_input = torch.randn(batch_size, 7, columns, rows).to(device)
+    dummy_input = torch.randn(inference_batch_size, 7, columns, rows).to(device)
     torch.onnx.export(model, dummy_input, f"{folder}/model_{generation}.onnx", input_names = input_names, output_names =
                       output_names)
 
@@ -64,9 +65,9 @@ training_window = range((generation - 1) // 2, generation)
 snapshots = torch.utils.data.ConcatDataset([Snapshots(f"{data_folder}/snapshots_{i}.csv") for i
                                             in training_window])
 training_data, eval_data = torch.utils.data.random_split(snapshots, [0.8, 0.2])
-training_loader  = torch.utils.data.DataLoader(training_data, batch_size = 64, shuffle = True, num_workers
+training_loader  = torch.utils.data.DataLoader(training_data, batch_size = training_batch_size, shuffle = True, num_workers
                                                = 4, pin_memory = True)
-eval_loader  = torch.utils.data.DataLoader(eval_data, batch_size = 64, num_workers
+eval_loader  = torch.utils.data.DataLoader(eval_data, batch_size = training_batch_size, num_workers
                                                = 4, pin_memory = True, shuffle = False)
 optimizer = torch.optim.AdamW(model.parameters(), lr=0.02)
 
