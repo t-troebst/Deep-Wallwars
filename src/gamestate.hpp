@@ -79,7 +79,7 @@ struct Turn {
 std::ostream& operator<<(std::ostream& out, Direction dir);
 std::ostream& operator<<(std::ostream& out, Player player);
 std::ostream& operator<<(std::ostream& out, Cell cell);
-std::ostream& operator<<(std::ostream& out, Wall all);
+std::ostream& operator<<(std::ostream& out, Wall wall);
 std::ostream& operator<<(std::ostream& out, Action const& action);
 std::ostream& operator<<(std::ostream& out, Move const& move);
 std::ostream& operator<<(std::ostream& out, Turn turn);
