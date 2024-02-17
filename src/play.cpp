@@ -5,8 +5,6 @@
 #include <folly/experimental/coro/Task.h>
 #include <folly/logging/xlog.h>
 
-#include <algorithm>
-#include <random>
 #include <ranges>
 
 #include "mcts.hpp"
@@ -18,13 +16,12 @@ struct GameResult {
     int wasted_inferences;
 };
 
-folly::coro::Task<GameResult> computer_play_single(const Board& board,
-                                                   std::shared_ptr<MCTSPolicy> policy1,
-                                                   std::shared_ptr<MCTSPolicy> policy2,
+folly::coro::Task<GameResult> computer_play_single(const Board& board, EvaluationFunction evaluate1,
+                                                   EvaluationFunction evaluate2,
                                                    std::uint32_t index,
                                                    ComputerPlayOptions const& opts) {
-    MCTS mcts1{policy1, board, {.max_parallelism = opts.max_parallel_samples, .seed = index}};
-    MCTS mcts2{policy2, board, {.max_parallelism = opts.max_parallel_samples, .seed = index}};
+    MCTS mcts1{evaluate1, board, {.max_parallelism = opts.max_parallel_samples, .seed = index}};
+    MCTS mcts2{evaluate2, board, {.max_parallelism = opts.max_parallel_samples, .seed = index}};
 
     XLOGF(INFO, "Starting game {}.", index);
 
@@ -32,46 +29,44 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board,
         for (int i = 0; i < 2; ++i) {
             co_await mcts1.sample(opts.samples);
             Action action = mcts1.commit_to_action(opts.temperature);
+            mcts2.force_action(action);
 
             if (mcts1.current_board().winner()) {
                 XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
-                mcts1.snapshot(Player::Red);
-                mcts2.snapshot(Player::Red);
+                opts.on_complete(mcts1);
+                opts.on_complete(mcts2);
                 co_return {Player::Red, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
             }
-
-            mcts2.force_action(action);
         }
 
         for (int i = 0; i < 2; ++i) {
             co_await mcts2.sample(opts.samples);
             Action action = mcts2.commit_to_action(opts.temperature);
+            mcts1.force_action(action);
 
             if (mcts2.current_board().winner()) {
                 XLOGF(INFO, "Blue player won game {} in {} moves.", index, num_moves);
-                mcts1.snapshot(Player::Blue);
-                mcts2.snapshot(Player::Blue);
+                opts.on_complete(mcts1);
+                opts.on_complete(mcts2);
                 co_return {Player::Blue, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
             }
-
-            mcts1.force_action(action);
         }
     }
 
     XLOGF(INFO, "Game {} was ended because it hit the move limit of {}", index, opts.move_limit);
-    mcts1.snapshot({});
-    mcts2.snapshot({});
+    opts.on_complete(mcts1);
+    opts.on_complete(mcts2);
     co_return {{}, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
 }
 
-folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy> policy1,
-                                        std::shared_ptr<MCTSPolicy> policy2, int games,
+folly::coro::Task<double> computer_play(Board board, EvaluationFunction evaluate1,
+                                        EvaluationFunction evaluate2, int games,
                                         ComputerPlayOptions opts) {
     folly::Executor* executor = co_await folly::coro::co_current_executor;
 
     auto game_tasks =
         views::iota(1, games + 1) | views::transform([&](int i) {
-            return computer_play_single(board, policy1, policy2, i, opts).scheduleOn(executor);
+            return computer_play_single(board, evaluate1, evaluate2, i, opts).scheduleOn(executor);
         });
 
     auto results = co_await folly::coro::collectAllWindowed(game_tasks, opts.max_parallel_games);

@@ -8,21 +8,24 @@
 
 #include "mcts.hpp"
 
-class CachedPolicy : public MCTSPolicy {
+class CachedPolicy {
 public:
-    CachedPolicy(std::shared_ptr<MCTSPolicy> policy, std::size_t capacity,
+    CachedPolicy(EvaluationFunction evaluate, std::size_t capacity,
                  std::size_t shards = std::thread::hardware_concurrency());
 
-    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) override;
-    void snapshot(NodeInfo const& node_info, std::optional<Player> winner) override;
+    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn);
 
     int cache_hits() const;
     int cache_misses() const;
 
 private:
-    std::shared_ptr<MCTSPolicy> m_policy;
-    std::vector<folly::Synchronized<folly::EvictingCacheMap<std::uint64_t, Evaluation>>> m_shards;
+    struct EvaluationCache {
+        EvaluationFunction evaluate;
+        std::vector<folly::Synchronized<folly::EvictingCacheMap<std::uint64_t, Evaluation>>> shards;
 
-    std::atomic<int> m_cache_hits = 0;
-    std::atomic<int> m_cache_misses = 0;
+        std::atomic<int> cache_hits = 0;
+        std::atomic<int> cache_misses = 0;
+    };
+
+    std::shared_ptr<EvaluationCache> m_cache;
 };

@@ -22,6 +22,7 @@ add_library(core OBJECT
     src/model.cpp
     src/play.cpp
     src/simple_policy.cpp
+    src/state_conversions.cpp
     src/tensorrt_model.cpp
 )
 target_link_libraries(core PUBLIC Folly::folly CUDA::cudart nvinfer nvonnxparser)

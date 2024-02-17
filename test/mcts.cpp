@@ -13,11 +13,11 @@
 #include "simple_policy.hpp"
 
 // For testing, only generates moves to the right
-struct RightPolicy : MCTSPolicy {
-    int samples = 0;
+struct RightPolicy {
+    std::shared_ptr<int> samples = std::make_shared<int>(0);
 
-    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) override {
-        ++samples;
+    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn) {
+        ++*samples;
         if (board.is_blocked(Wall{board.position(turn.player), Direction::Right})) {
             co_return Evaluation{0, {}};
         }
@@ -27,8 +27,7 @@ struct RightPolicy : MCTSPolicy {
 
 TEST_CASE("Basic Initialization", "[MCTS]") {
     Board board{4, 4};
-    auto policy = std::make_shared<SimplePolicy>(1.0, 1.0, 1.0);
-    MCTS mcts{std::move(policy), std::move(board)};
+    MCTS mcts{SimplePolicy{1.0, 1.0, 1.0}, std::move(board)};
 
     CHECK(mcts.root_value() == 0.0);
     CHECK(mcts.root_samples() == 1);
@@ -37,8 +36,7 @@ TEST_CASE("Basic Initialization", "[MCTS]") {
 
 TEST_CASE("Single sample", "[MCTS]") {
     Board board{4, 4};
-    auto policy = std::make_shared<SimplePolicy>(1.0, 1.0, 1.0);
-    MCTS mcts{std::move(policy), std::move(board)};
+    MCTS mcts{SimplePolicy{1.0, 1.0, 1.0}, std::move(board)};
 
     folly::coro::blockingWait(mcts.sample(1));
 
@@ -50,7 +48,7 @@ TEST_CASE("Single sample", "[MCTS]") {
 TEST_CASE("Commit to action", "[MCTS]") {
     Board board{4, 4};
     auto policy = std::make_shared<RightPolicy>();
-    MCTS mcts{std::move(policy), std::move(board)};
+    MCTS mcts{SimplePolicy{1.0, 1.0, 1.0}, std::move(board)};
 
     CHECK_THROWS(mcts.commit_to_action());
     CHECK_THROWS(mcts.commit_to_action(0.2));
@@ -64,8 +62,7 @@ TEST_CASE("Commit to action", "[MCTS]") {
 
 TEST_CASE("Force action", "[MCTS]") {
     Board board{4, 4};
-    auto policy = std::make_shared<RightPolicy>();
-    MCTS mcts{policy, std::move(board)};
+    MCTS mcts{RightPolicy{}, std::move(board)};
 
     SECTION("No previous sample") {}
     SECTION("Previous sample") {
@@ -79,21 +76,21 @@ TEST_CASE("Force action", "[MCTS]") {
 
 TEST_CASE("Sample many", "[MCTS]") {
     Board board{4, 4};
-    auto policy = std::make_shared<RightPolicy>();
+    RightPolicy policy;
     MCTS mcts{policy, std::move(board)};
 
     folly::coro::blockingWait(mcts.sample(1000));
 
     CHECK(mcts.wasted_inferences() == 0);
     CHECK(mcts.root_samples() == 1001);
-    CHECK(policy->samples == 3);
+    CHECK(*policy.samples == 3);
 }
 
-struct SlowRightPolicy : MCTSPolicy {
-    std::atomic<int> samples = 0;
+struct SlowRightPolicy {
+    std::shared_ptr<std::atomic<int>> samples = std::make_shared<std::atomic<int>>(0);
 
-    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) override {
-        ++samples;
+    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn) {
+        ++*samples;
         co_await folly::coro::sleep(std::chrono::milliseconds{250});
         Evaluation result;
 
@@ -108,12 +105,12 @@ struct SlowRightPolicy : MCTSPolicy {
 
 TEST_CASE("Sample slow in parallel", "[MCTS]") {
     Board board{4, 4};
-    auto policy = std::make_shared<SlowRightPolicy>();
+    SlowRightPolicy policy;
     MCTS mcts{policy, std::move(board), {.max_parallelism = 5}};
 
     folly::coro::blockingWait(mcts.sample(16));
 
     CHECK(mcts.wasted_inferences() == 8);
     CHECK(mcts.root_samples() == 17);
-    CHECK(policy->samples > 3);
+    CHECK(*policy.samples > 3);
 }

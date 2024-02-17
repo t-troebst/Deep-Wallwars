@@ -4,7 +4,6 @@
 #include <folly/futures/Future.h>
 
 #include <atomic>
-#include <memory>
 #include <random>
 
 #include "gamestate.hpp"
@@ -54,25 +53,14 @@ struct NodeInfo {
     std::vector<EdgeInfo> edges;
 };
 
-struct MCTSPolicy {
-    struct Evaluation {
-        float value;
-        std::vector<TreeEdge> edges;
-    };
-
-    virtual folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) = 0;
-    virtual void snapshot(NodeInfo const& current_root, std::optional<Player> winner);
-
-    MCTSPolicy() = default;
-
-    MCTSPolicy(MCTSPolicy const& other) = delete;
-    MCTSPolicy(MCTSPolicy&& other) = delete;
-
-    MCTSPolicy& operator=(MCTSPolicy const& other) = delete;
-    MCTSPolicy& operator=(MCTSPolicy&& other) = delete;
-
-    virtual ~MCTSPolicy() = default;
+struct Evaluation {
+    float value;
+    std::vector<TreeEdge> edges;
 };
+
+// Coroutine that takes the current board and player turn and "evaluates" it, either by some
+// heuristic or ML model.
+using EvaluationFunction = std::function<folly::coro::Task<Evaluation>(Board const&, Turn)>;
 
 class MCTS {
 public:
@@ -87,8 +75,8 @@ public:
         std::uint32_t seed = 42;
     };
 
-    MCTS(std::shared_ptr<MCTSPolicy> policy, Board board);
-    MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options opts);
+    MCTS(EvaluationFunction evaluate, Board board);
+    MCTS(EvaluationFunction evaluate, Board board, Options opts);
 
     Board const& current_board() const;
     float root_value() const;
@@ -108,12 +96,10 @@ public:
     void force_action(Action const& action);
     void force_move(Move const& move);
 
-    void snapshot(std::optional<Player> winner);
-
     ~MCTS();
 
 private:
-    std::shared_ptr<MCTSPolicy> m_policy;
+    EvaluationFunction m_evaluate;
     TreeNode* m_root;
     Options m_opts;
     std::gamma_distribution<float> m_gamma_dist;

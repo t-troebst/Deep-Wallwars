@@ -2,11 +2,11 @@
 
 #include "mcts.hpp"
 
-class SimplePolicy : public MCTSPolicy {
+class SimplePolicy {
 public:
     SimplePolicy(float move_prior, float good_move_bias, float bad_move_bias);
 
-    folly::coro::Task<Evaluation> evaluate_position(Board const& board, Turn turn) override;
+    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn);
 
 private:
     float m_move_prior;

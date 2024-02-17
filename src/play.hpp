@@ -3,11 +3,13 @@
 #include <folly/experimental/coro/Task.h>
 
 #include <cstdint>
-#include <memory>
 
 #include "gamestate.hpp"
+#include "mcts.hpp"
 
-struct MCTSPolicy;
+// Called once for each game with the winner after the MCTS has finished. Can be used to output
+// training data.
+using CompletionCallback = std::function<void(MCTS const&)>;
 
 struct ComputerPlayOptions {
     int threads = 4;
@@ -17,8 +19,9 @@ struct ComputerPlayOptions {
     int move_limit = 100;
     double temperature = 0.2;
     std::uint32_t seed = 42;
+    CompletionCallback on_complete = [](MCTS const&) {};
 };
 
-folly::coro::Task<double> computer_play(Board board, std::shared_ptr<MCTSPolicy> policy1,
-                                        std::shared_ptr<MCTSPolicy> policy2, int games,
+folly::coro::Task<double> computer_play(Board board, EvaluationFunction evaluate1,
+                                        EvaluationFunction evaluate2, int games,
                                         ComputerPlayOptions opts = {});

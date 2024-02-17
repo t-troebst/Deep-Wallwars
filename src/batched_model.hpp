@@ -8,16 +8,12 @@
 #include <thread>
 #include <vector>
 
+#include "state_conversions.hpp"
+
 struct Model;
 
 class BatchedModel {
 public:
-    struct Output {
-        std::vector<float> wall_prior;
-        std::array<float, 4> step_prior;
-        float value;
-    };
-
     BatchedModel(std::unique_ptr<Model> model);
     BatchedModel(std::unique_ptr<Model> model, int queue_size);
     BatchedModel(std::vector<std::unique_ptr<Model>> models);
@@ -31,7 +27,7 @@ public:
     BatchedModel& operator=(BatchedModel const& other) = delete;
     BatchedModel& operator=(BatchedModel&& other) = delete;
 
-    folly::SemiFuture<Output> inference(std::vector<float> state);
+    folly::SemiFuture<ModelOutput> inference(std::vector<float> state);
 
     std::size_t total_inferences() const;
     std::size_t total_batches() const;
@@ -39,7 +35,7 @@ public:
 private:
     struct InferenceTask {
         std::vector<float> state;
-        folly::Promise<Output> output;
+        folly::Promise<ModelOutput> output;
     };
 
     folly::MPMCQueue<InferenceTask> m_tasks;

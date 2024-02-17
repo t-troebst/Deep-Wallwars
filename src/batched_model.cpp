@@ -28,7 +28,7 @@ BatchedModel::~BatchedModel() {
     }
 }
 
-folly::SemiFuture<BatchedModel::Output> BatchedModel::inference(std::vector<float> states) {
+folly::SemiFuture<ModelOutput> BatchedModel::inference(std::vector<float> states) {
     InferenceTask task{std::move(states), {}};
     auto result = task.output.getSemiFuture();
 
@@ -46,7 +46,7 @@ std::size_t BatchedModel::total_batches() const {
 }
 
 void BatchedModel::run_worker(std::size_t idx) {
-    std::vector<folly::Promise<Output>> dequeued_promises;
+    std::vector<folly::Promise<ModelOutput>> dequeued_promises;
     std::vector<float> states(m_models[idx]->batch_size() * m_models[idx]->state_size());
     std::vector<float> wall_priors(m_models[idx]->batch_size() * m_models[idx]->wall_prior_size());
     std::vector<float> step_priors(m_models[idx]->batch_size() * 4);
@@ -79,7 +79,8 @@ void BatchedModel::run_worker(std::size_t idx) {
             std::array<float, 4> step_prior;
             std::copy_n(step_priors.begin() + 4 * i, 4, step_prior.begin());
 
-            dequeued_promises[i].setValue(Output{std::move(wall_prior), step_prior, values[i]});
+            dequeued_promises[i].setValue(
+                ModelOutput{std::move(wall_prior), step_prior, values[i]});
         }
 
         m_batches += 1;

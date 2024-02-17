@@ -16,6 +16,7 @@
 #include "mcts.hpp"
 #include "play.hpp"
 #include "simple_policy.hpp"
+#include "state_conversions.hpp"
 #include "tensorrt_model.hpp"
 
 namespace nv = nvinfer1;
@@ -82,22 +83,28 @@ int main(int argc, char** argv) {
 
     auto batched_model = std::make_shared<BatchedModel>(std::move(safe_models), 4096);
 
-    auto snapshots_file = std::make_shared<std::ofstream>(FLAGS_snapshots);
-    auto sp1 = std::make_shared<BatchedModelPolicy>(batched_model, snapshots_file);
-    auto sp1_cached = std::make_shared<CachedPolicy>(sp1, FLAGS_cache_size);
-    auto sp2 = std::make_shared<SimplePolicy>(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
+    std::ofstream snapshots_file(FLAGS_snapshots);
+    TrainingDataPrinter training_data_printer(snapshots_file);
+
+    BatchedModelPolicy batched_model_policy(batched_model);
+    CachedPolicy cached_policy(batched_model_policy, FLAGS_cache_size);
+    // SimplePolicy sp2(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
 
     Board board{FLAGS_columns, FLAGS_rows};
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
     auto start = std::chrono::high_resolution_clock::now();
-    folly::coro::blockingWait(computer_play(board, sp1_cached, sp1_cached, FLAGS_games,
-                                            {.samples = FLAGS_samples, .seed = FLAGS_seed})
+    folly::coro::blockingWait(computer_play(board, cached_policy, cached_policy, FLAGS_games,
+                                            {
+                                                .samples = FLAGS_samples,
+                                                .seed = FLAGS_seed,
+                                                .on_complete = training_data_printer,
+                                            })
                                   .scheduleOn(&thread_pool));
     auto stop = std::chrono::high_resolution_clock::now();
 
-    XLOGF(INFO, "{} cache hits, {} cache misses during play.", sp1_cached->cache_hits(),
-          sp1_cached->cache_misses());
+    XLOGF(INFO, "{} cache hits, {} cache misses during play.", cached_policy.cache_hits(),
+          cached_policy.cache_misses());
     auto inferences = batched_model->total_inferences();
     auto batches = batched_model->total_batches();
     XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", inferences, batches,

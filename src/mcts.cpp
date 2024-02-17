@@ -37,13 +37,11 @@ void TreeNode::add_sample(float weight) {
     } while (!value.compare_exchange_weak(old_val, new_val));
 }
 
-void MCTSPolicy::snapshot(NodeInfo const&, std::optional<Player>) {}
+MCTS::MCTS(EvaluationFunction evaluate, Board board)
+    : MCTS{std::move(evaluate), std::move(board), {}} {}
 
-MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board)
-    : MCTS{std::move(policy), std::move(board), {}} {}
-
-MCTS::MCTS(std::shared_ptr<MCTSPolicy> policy, Board board, Options options)
-    : m_policy{std::move(policy)},
+MCTS::MCTS(EvaluationFunction evaluate, Board board, Options options)
+    : m_evaluate{std::move(evaluate)},
       m_root{folly::coro::blockingWait(create_tree_node(board, options.starting_turn, nullptr))},
       m_opts{options},
       m_gamma_dist{options.direchlet_alpha, 1.0},
@@ -263,7 +261,7 @@ void MCTS::add_root_noise() {
 }
 
 folly::coro::Task<TreeNode*> MCTS::create_tree_node(Board board, Turn turn, TreeNode* parent) {
-    MCTSPolicy::Evaluation eval = co_await m_policy->evaluate_position(board, turn);
+    Evaluation eval = co_await m_evaluate(board, turn);
     TreeNode* result = new TreeNode{parent,
                                     std::move(board),
                                     turn,
@@ -272,13 +270,6 @@ folly::coro::Task<TreeNode*> MCTS::create_tree_node(Board board, Turn turn, Tree
                                     std::move(eval.edges)};
 
     co_return result;
-}
-
-void MCTS::snapshot(std::optional<Player> winner) {
-    for (NodeInfo const& ni : m_history) {
-        m_policy->snapshot(ni, winner);
-    }
-    m_policy->snapshot(root_info(), winner);
 }
 
 MCTS::~MCTS() {
