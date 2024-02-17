@@ -1,7 +1,6 @@
 #include "batched_model.hpp"
 
 #include <algorithm>
-#include <ranges>
 
 #include "model.hpp"
 
@@ -16,9 +15,9 @@ BatchedModel::BatchedModel(std::unique_ptr<Model> model, int queue_size) : m_tas
 }
 
 BatchedModel::BatchedModel(std::vector<std::unique_ptr<Model>> models, int queue_size)
-    : m_workers{}, m_tasks(queue_size), m_models{std::move(models)} {
+    : m_tasks(queue_size), m_models{std::move(models)} {
     for (std::size_t i = 0; i < m_models.size(); ++i) {
-        m_workers.push_back(std::jthread{[this, i] { run_worker(i); }});
+        m_workers.emplace_back([this, i] { run_worker(i); });
     }
 }
 

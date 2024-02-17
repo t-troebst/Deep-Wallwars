@@ -42,12 +42,14 @@ private:
         folly::Promise<Output> output;
     };
 
-    std::vector<std::jthread> m_workers;
     folly::MPMCQueue<InferenceTask> m_tasks;
     std::vector<std::unique_ptr<Model>> m_models;
 
     std::atomic<std::size_t> m_batches = 0;
     std::atomic<std::size_t> m_inferences = 0;
+
+    // Worker threads need to come last so everything else is still alive while we join them.
+    std::vector<std::jthread> m_workers;
 
     void run_worker(std::size_t idx);
 };
