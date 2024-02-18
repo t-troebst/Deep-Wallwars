@@ -3,17 +3,20 @@ import sys
 import torch.onnx
 import torch.utils
 import torch.utils.data
+import torch.nn as nn
+import torch.nn.functional as F
 from model import ResNet
 
 device = torch.device("cuda:0")
 
 columns = 6
 rows = 6
-channels = 64
-layers = 10
-epochs = 2
+channels = 16
+layers = 5
+epochs = 5
 training_batch_size = 64
 inference_batch_size = 256
+kl_loss_scale = 0.1
 
 data_folder = sys.argv[1]
 models_folder = sys.argv[2]
@@ -45,9 +48,18 @@ class Snapshots(torch.utils.data.Dataset):
 
 
 def loss_fn(wp_out, sp_out, vs_out, wp_label, sp_label, vs_label):
-    cel = torch.nn.CrossEntropyLoss()
-    mse = torch.nn.MSELoss()
-    return cel(wp_out, wp_label) + cel(sp_out, sp_label) + mse(vs_out, vs_label)
+    kl_div = nn.KLDivLoss(reduction='sum')
+    mse = nn.MSELoss(reduction='sum')
+    
+    actions_out = torch.cat([wp_out, sp_out], dim=1)
+    log_probs = F.log_softmax(actions_out, dim=1)
+    
+    actions_label = torch.cat([wp_label, sp_label], dim=1)
+    
+    kl_loss = kl_loss_scale * kl_div(log_probs, actions_label)
+    mse_loss = mse(vs_out, vs_label)
+
+    return (kl_loss, mse_loss)
 
 
 def save_model(model, folder):
@@ -93,32 +105,43 @@ eval_loader = torch.utils.data.DataLoader(
 )
 optimizer = torch.optim.AdamW(model.parameters(), lr=0.02)
 
-for epoch in range(epochs):
-    for states, wall_priors, step_priors, values in training_loader:
-        states = states.to(device)
-        wall_priors = wall_priors.to(device)
-        step_priors = step_priors.to(device)
-        values = values.to(device)
+kl_losses = []
+mse_losses = []
 
-        optimizer.zero_grad()
-        wp, sp, vs = model.forward(states)
-        loss = loss_fn(wp, sp, vs, wall_priors, step_priors, values)
-
-        loss.backward()
-        optimizer.step()
-        del loss
-
-    model.train(False)
-    eval_loss = 0
-    for states, wall_priors, step_priors, values in eval_loader:
-        states = states.to(device)
-        wall_priors = wall_priors.to(device)
-        step_priors = step_priors.to(device)
-        values = values.to(device)
-        wp, sp, vs = model.forward(states)
-        eval_loss += float(loss_fn(wp, sp, vs, wall_priors, step_priors, values))
-    print(
-        f"Average loss in epoch {epoch} of generation {generation}: {eval_loss / len(eval_loader)}."
-    )
+try:
+    for epoch in range(epochs):
+        for states, wall_priors, step_priors, values in training_loader:
+            states = states.to(device)
+            wall_priors = wall_priors.to(device)
+            step_priors = step_priors.to(device)
+            values = values.to(device)
+    
+            optimizer.zero_grad()
+            wp, sp, vs = model.forward(states)
+            loss = sum(loss_fn(wp, sp, vs, wall_priors, step_priors, values))
+    
+            loss.backward()
+            optimizer.step()
+            del loss
+    
+        model.train(False)
+        total_kl_loss = 0
+        total_mse_loss = 0
+        for states, wall_priors, step_priors, values in eval_loader:
+            states = states.to(device)
+            wall_priors = wall_priors.to(device)
+            step_priors = step_priors.to(device)
+            values = values.to(device)
+            wp, sp, vs = model.forward(states)
+            kl_loss, mse_loss = loss_fn(wp, sp, vs, wall_priors, step_priors, values)
+            total_kl_loss += float(kl_loss)
+            total_mse_loss += float(mse_loss)
+        kl_losses.append(total_kl_loss / len(eval_loader))
+        mse_losses.append(total_mse_loss / len(eval_loader))
+        print(
+            f"Average loss in epoch {epoch} of generation {generation}: {total_kl_loss / len(eval_loader)} + {total_mse_loss / len(eval_loader)} = {(total_kl_loss + total_mse_loss) / len(eval_loader)}."
+        )
+except KeyboardInterrupt:
+    print("Trainig was interrupted.")
 
 save_model(model, models_folder)
