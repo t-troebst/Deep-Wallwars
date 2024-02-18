@@ -2,7 +2,8 @@
 
 #include <folly/Overload.h>
 
-ModelOutput convert_to_model_output(NodeInfo const& node_info, std::optional<Player> winner) {
+ModelOutput convert_to_model_output(NodeInfo const& node_info, std::optional<Player> winner,
+                                    float winner_contribution) {
     std::size_t board_size = node_info.board.columns() * node_info.board.rows();
 
     std::vector<float> wall_prior(2 * board_size);
@@ -32,7 +33,9 @@ ModelOutput convert_to_model_output(NodeInfo const& node_info, std::optional<Pla
     }
 
     float const z_value = winner ? (*winner == node_info.turn.player ? 1 : -1) : 0;
-    return {std::move(wall_prior), step_prior, 0.5f * node_info.q_value + 0.5f * z_value};
+    float const expected_value =
+        (1 - winner_contribution) * node_info.q_value + winner_contribution * z_value;
+    return {std::move(wall_prior), step_prior, expected_value};
 }
 
 std::vector<float> convert_to_model_input(Board const& board, Turn turn) {
@@ -80,8 +83,9 @@ void print_training_data_point(std::ostream& out_stream, ModelInput const& model
     out_stream << model_output.value << "\n\n";
 }
 
-TrainingDataPrinter::TrainingDataPrinter(std::ostream& out)
-    : m_output{std::make_shared<folly::Synchronized<std::ostream*>>(&out)} {}
+TrainingDataPrinter::TrainingDataPrinter(std::ostream& out, float winner_contribution)
+    : m_output{std::make_shared<folly::Synchronized<std::ostream*>>(&out)},
+      m_winner_contribution{winner_contribution} {}
 
 void TrainingDataPrinter::operator()(MCTS const& out) const {
     std::optional<Player> winner = out.current_board().winner();
@@ -90,13 +94,14 @@ void TrainingDataPrinter::operator()(MCTS const& out) const {
 
     for (NodeInfo const& node_info : out.history()) {
         ModelInput model_input = convert_to_model_input(node_info.board, node_info.turn);
-        ModelOutput model_output = convert_to_model_output(node_info, winner);
+        ModelOutput model_output =
+            convert_to_model_output(node_info, winner, m_winner_contribution);
         print_training_data_point(**locked_output, model_input, model_output);
     }
 
     // The history does not include the actual winning board state.
     NodeInfo const& node_info = out.root_info();
     ModelInput model_input = convert_to_model_input(node_info.board, node_info.turn);
-    ModelOutput model_output = convert_to_model_output(node_info, winner);
+    ModelOutput model_output = convert_to_model_output(node_info, winner, m_winner_contribution);
     print_training_data_point(**locked_output, model_input, model_output);
 }
