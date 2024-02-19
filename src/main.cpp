@@ -73,28 +73,28 @@ int main(int argc, char** argv) {
     std::unique_ptr<nv::IRuntime> runtime{nv::createInferRuntime(logger)};
     std::ifstream model_file(FLAGS_model, std::ios::binary);
     auto engine = load_serialized_engine(*runtime, model_file);
-    auto trt_models = get_models(*engine, 3);
+    auto trt_models = get_models(*engine, 1);
 
     // For some reason, the second model created by TensorRT is misaligned in GPU memory. This is an
     // extremely ridiculous work-around. Nvidia what the hell?
-    std::vector<std::unique_ptr<Model>> safe_models;
-    safe_models.push_back(std::move(trt_models[0]));
-    safe_models.push_back(std::move(trt_models[2]));
+    // std::vector<std::unique_ptr<Model>> safe_models;
+    // safe_models.push_back(std::move(trt_models[0]));
+    // // safe_models.push_back(std::move(trt_models[2]));
 
-    auto batched_model = std::make_shared<BatchedModel>(std::move(safe_models), 4096);
+    auto batched_model = std::make_shared<BatchedModel>(std::move(trt_models), 4096);
 
     std::ofstream snapshots_file(FLAGS_snapshots);
-    TrainingDataPrinter training_data_printer(snapshots_file);
+    TrainingDataPrinter training_data_printer(snapshots_file, 1.0);
 
     BatchedModelPolicy batched_model_policy(batched_model);
     CachedPolicy cached_policy(batched_model_policy, FLAGS_cache_size);
-    // SimplePolicy sp2(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
+    SimplePolicy simple_policy(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
 
     Board board{FLAGS_columns, FLAGS_rows};
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
     auto start = std::chrono::high_resolution_clock::now();
-    folly::coro::blockingWait(computer_play(board, cached_policy, cached_policy, FLAGS_games,
+    folly::coro::blockingWait(computer_play(board, simple_policy, simple_policy, FLAGS_games,
                                             {
                                                 .samples = FLAGS_samples,
                                                 .seed = FLAGS_seed,

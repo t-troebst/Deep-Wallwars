@@ -9,11 +9,11 @@ from model import ResNet
 
 device = torch.device("cuda:0")
 
-columns = 6
-rows = 6
-channels = 16
-layers = 5
-epochs = 5
+columns = 5
+rows = 5
+channels = 64
+layers = 10
+epochs = 20
 training_batch_size = 64
 inference_batch_size = 256
 kl_loss_scale = 0.1
@@ -22,9 +22,8 @@ data_folder = sys.argv[1]
 models_folder = sys.argv[2]
 generation = int(sys.argv[3])
 
-
 class Snapshots(torch.utils.data.Dataset):
-    def __init__(self, file_name):
+    def __init__(self, columns, rows, file_name):
         self.data = [[], [], [], []]
         i = 0
         with open(file_name) as f:
@@ -46,16 +45,15 @@ class Snapshots(torch.utils.data.Dataset):
     def __getitem__(self, index):
         return [self.data[x][index] for x in range(4)]
 
-
 def loss_fn(wp_out, sp_out, vs_out, wp_label, sp_label, vs_label):
-    kl_div = nn.KLDivLoss(reduction='sum')
-    mse = nn.MSELoss(reduction='sum')
-    
+    kl_div = nn.KLDivLoss(reduction="sum")
+    mse = nn.MSELoss(reduction="sum")
+
     actions_out = torch.cat([wp_out, sp_out], dim=1)
     log_probs = F.log_softmax(actions_out, dim=1)
-    
+
     actions_label = torch.cat([wp_label, sp_label], dim=1)
-    
+
     kl_loss = kl_loss_scale * kl_div(log_probs, actions_label)
     mse_loss = mse(vs_out, vs_label)
 
@@ -86,7 +84,10 @@ else:
 
 training_window = range((generation - 1) // 2, generation)
 snapshots = torch.utils.data.ConcatDataset(
-    [Snapshots(f"{data_folder}/snapshots_{i}.csv") for i in training_window]
+    [
+        Snapshots(columns, rows, f"{data_folder}/snapshots_{i}.csv")
+        for i in training_window
+    ]
 )
 training_data, eval_data = torch.utils.data.random_split(snapshots, [0.8, 0.2])
 training_loader = torch.utils.data.DataLoader(
@@ -115,15 +116,15 @@ try:
             wall_priors = wall_priors.to(device)
             step_priors = step_priors.to(device)
             values = values.to(device)
-    
+
             optimizer.zero_grad()
             wp, sp, vs = model.forward(states)
             loss = sum(loss_fn(wp, sp, vs, wall_priors, step_priors, values))
-    
+
             loss.backward()
             optimizer.step()
             del loss
-    
+
         model.train(False)
         total_kl_loss = 0
         total_mse_loss = 0
@@ -136,10 +137,10 @@ try:
             kl_loss, mse_loss = loss_fn(wp, sp, vs, wall_priors, step_priors, values)
             total_kl_loss += float(kl_loss)
             total_mse_loss += float(mse_loss)
-        kl_losses.append(total_kl_loss / len(eval_loader))
-        mse_losses.append(total_mse_loss / len(eval_loader))
+        kl_losses.append(total_kl_loss / len(eval_data))
+        mse_losses.append(total_mse_loss / len(eval_data))
         print(
-            f"Average loss in epoch {epoch} of generation {generation}: {total_kl_loss / len(eval_loader)} + {total_mse_loss / len(eval_loader)} = {(total_kl_loss + total_mse_loss) / len(eval_loader)}."
+            f"Average loss in epoch {epoch} of generation {generation}: {total_kl_loss / len(eval_data)} + {total_mse_loss / len(eval_data)} = {(total_kl_loss + total_mse_loss) / len(eval_data)}."
         )
 except KeyboardInterrupt:
     print("Trainig was interrupted.")
