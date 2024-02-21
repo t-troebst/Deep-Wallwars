@@ -73,14 +73,7 @@ int main(int argc, char** argv) {
     std::unique_ptr<nv::IRuntime> runtime{nv::createInferRuntime(logger)};
     std::ifstream model_file(FLAGS_model, std::ios::binary);
     auto engine = load_serialized_engine(*runtime, model_file);
-    auto trt_models = get_models(*engine, 1);
-
-    // For some reason, the second model created by TensorRT is misaligned in GPU memory. This is an
-    // extremely ridiculous work-around. Nvidia what the hell?
-    // std::vector<std::unique_ptr<Model>> safe_models;
-    // safe_models.push_back(std::move(trt_models[0]));
-    // // safe_models.push_back(std::move(trt_models[2]));
-
+    auto trt_models = get_models(*engine, 2);
     auto batched_model = std::make_shared<BatchedModel>(std::move(trt_models), 4096);
 
     std::ofstream snapshots_file(FLAGS_snapshots);
@@ -94,7 +87,7 @@ int main(int argc, char** argv) {
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
     auto start = std::chrono::high_resolution_clock::now();
-    folly::coro::blockingWait(computer_play(board, simple_policy, simple_policy, FLAGS_games,
+    folly::coro::blockingWait(computer_play(board, cached_policy, cached_policy, FLAGS_games,
                                             {
                                                 .samples = FLAGS_samples,
                                                 .seed = FLAGS_seed,
