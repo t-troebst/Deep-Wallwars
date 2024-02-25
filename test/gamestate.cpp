@@ -20,10 +20,10 @@ TEST_CASE("Empty board", "[Game State]") {
     Board board{3, 3};
 
     REQUIRE(board.position(Player::Red) == Cell{0, 0});
-    REQUIRE(board.position(Player::Blue) == Cell{0, 2});
+    REQUIRE(board.position(Player::Blue) == Cell{2, 0});
 
     REQUIRE(board.goal(Player::Red) == Cell{2, 2});
-    REQUIRE(board.goal(Player::Blue) == Cell{2, 0});
+    REQUIRE(board.goal(Player::Blue) == Cell{0, 2});
 
     REQUIRE(board.legal_directions(Player::Red).size() == 2);
     REQUIRE(board.legal_directions(Player::Blue).size() == 2);
@@ -98,8 +98,8 @@ TEST_CASE("Flipping commutes with hash", "[Game State]") {
     board.place_wall(Player::Red, {{0, 0}, Direction::Down});
     board.place_wall(Player::Red, {{0, 0}, Direction::Right});
 
-    board.place_wall(Player::Blue, {{0, 4}, Direction::Down});
-    board.place_wall(Player::Blue, {{0, 4}, Direction::Left});
+    board.place_wall(Player::Blue, {{4, 0}, Direction::Down});
+    board.place_wall(Player::Blue, {{4, 0}, Direction::Left});
 
     CHECK(board.hash_from_pov(Player::Red) == board.hash_from_pov(Player::Blue, true));
 }

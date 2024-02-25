@@ -12,16 +12,16 @@
 
 #include "simple_policy.hpp"
 
-// For testing, only generates moves to the right
-struct RightPolicy {
+// For testing, only generates moves downwards
+struct DownPolicy {
     std::shared_ptr<int> samples = std::make_shared<int>(0);
 
     folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn) {
         ++*samples;
-        if (board.is_blocked(Wall{board.position(turn.player), Direction::Right})) {
+        if (board.is_blocked(Wall{board.position(turn.player), Direction::Down})) {
             co_return Evaluation{0, {}};
         }
-        co_return Evaluation{0, {TreeEdge(Direction::Right, 1.0)}};
+        co_return Evaluation{0, {TreeEdge(Direction::Down, 1.0)}};
     };
 };
 
@@ -47,8 +47,7 @@ TEST_CASE("Single sample", "[MCTS]") {
 
 TEST_CASE("Commit to action", "[MCTS]") {
     Board board{4, 4};
-    auto policy = std::make_shared<RightPolicy>();
-    MCTS mcts{SimplePolicy{1.0, 1.0, 1.0}, std::move(board)};
+    MCTS mcts{DownPolicy{}, std::move(board)};
 
     CHECK_THROWS(mcts.commit_to_action());
     CHECK_THROWS(mcts.commit_to_action(0.2));
@@ -56,37 +55,37 @@ TEST_CASE("Commit to action", "[MCTS]") {
     folly::coro::blockingWait(mcts.sample(1));
 
     Action action = mcts.commit_to_action();
-    CHECK(std::get<Direction>(action) == Direction::Right);
+    CHECK(std::get<Direction>(action) == Direction::Down);
     CHECK(mcts.current_board().position(Player::Red) == Cell{0, 1});
 }
 
 TEST_CASE("Force action", "[MCTS]") {
     Board board{4, 4};
-    MCTS mcts{RightPolicy{}, std::move(board)};
+    MCTS mcts{DownPolicy{}, std::move(board)};
 
     SECTION("No previous sample") {}
     SECTION("Previous sample") {
         folly::coro::blockingWait(mcts.sample(1));
     }
 
-    mcts.force_action(Direction::Right);
+    mcts.force_action(Direction::Down);
     CHECK(mcts.root_samples() == 1);
     CHECK(mcts.current_board().position(Player::Red) == Cell{0, 1});
 }
 
 TEST_CASE("Sample many", "[MCTS]") {
     Board board{4, 4};
-    RightPolicy policy;
+    DownPolicy policy;
     MCTS mcts{policy, std::move(board)};
 
     folly::coro::blockingWait(mcts.sample(1000));
 
     CHECK(mcts.wasted_inferences() == 0);
     CHECK(mcts.root_samples() == 1001);
-    CHECK(*policy.samples == 3);
+    CHECK(*policy.samples == 6);
 }
 
-struct SlowRightPolicy {
+struct SlowDownPolicy {
     std::shared_ptr<std::atomic<int>> samples = std::make_shared<std::atomic<int>>(0);
 
     folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn) {
@@ -94,10 +93,10 @@ struct SlowRightPolicy {
         co_await folly::coro::sleep(std::chrono::milliseconds{250});
         Evaluation result;
 
-        if (board.is_blocked(Wall{board.position(turn.player), Direction::Right})) {
+        if (board.is_blocked(Wall{board.position(turn.player), Direction::Down})) {
             result = Evaluation{0, {}};
         } else {
-            result = Evaluation{0, {TreeEdge(Direction::Right, 1.0)}};
+            result = Evaluation{0, {TreeEdge(Direction::Down, 1.0)}};
         }
         co_return result;
     };
@@ -105,12 +104,12 @@ struct SlowRightPolicy {
 
 TEST_CASE("Sample slow in parallel", "[MCTS]") {
     Board board{4, 4};
-    SlowRightPolicy policy;
+    SlowDownPolicy policy;
     MCTS mcts{policy, std::move(board), {.max_parallelism = 5}};
 
     folly::coro::blockingWait(mcts.sample(16));
 
-    CHECK(mcts.wasted_inferences() == 8);
+    CHECK(mcts.wasted_inferences() == 12);
     CHECK(mcts.root_samples() == 17);
     CHECK(*policy.samples > 3);
 }

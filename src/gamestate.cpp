@@ -49,13 +49,13 @@ Player other_player(Player player) {
 Cell Cell::step(Direction direction) const {
     switch (direction) {
         case Direction::Right:
-            return {column, row + 1};
-        case Direction::Down:
             return {column + 1, row};
+        case Direction::Down:
+            return {column, row + 1};
         case Direction::Left:
-            return {column, row - 1};
-        case Direction::Up:
             return {column - 1, row};
+        case Direction::Up:
+            return {column, row - 1};
     }
 
     throw std::runtime_error("Unreachable: invalid direction (step)!");
@@ -74,11 +74,11 @@ Wall::Wall(Cell c, Direction dir) {
             type = Down;
             return;
         case Direction::Left:
-            cell = {c.column, c.row - 1};
+            cell = {c.column - 1, c.row};
             type = Right;
             return;
         case Direction::Up:
-            cell = {c.column - 1, c.row};
+            cell = {c.column, c.row - 1};
             type = Down;
             return;
     }
@@ -272,8 +272,8 @@ Board::Board(int columns, int rows, Cell red_start, Cell red_goal)
             rows,
             red_start,
             red_goal,
-            {red_start.column, rows - 1 - red_start.row},
-            {red_goal.column, rows - 1 - red_goal.row}} {}
+            {columns - 1 - red_start.column, red_start.row},
+            {columns - 1 - red_goal.column, red_goal.row}} {}
 
 Board::Board(int columns, int rows) : Board{columns, rows, {0, 0}, {columns - 1, rows - 1}} {}
 
@@ -284,7 +284,7 @@ bool Board::is_blocked(Wall wall) const {
     }
 
     if (wall.type == Wall::Down) {
-        if (wall.cell.column == m_columns - 1) {
+        if (wall.cell.row == m_rows - 1) {
             return true;
         }
 
@@ -294,7 +294,7 @@ bool Board::is_blocked(Wall wall) const {
             return true;
         }
     } else {
-        if (wall.cell.row == m_rows - 1) {
+        if (wall.cell.column == m_columns - 1) {
             return true;
         }
 
@@ -594,7 +594,7 @@ Board::State Board::state_at(Cell cell) const {
 }
 
 Cell Board::flip_horizontal(Cell cell) const {
-    return {cell.column, m_rows - 1 - cell.row};
+    return {m_columns - 1 - cell.column, cell.row};
 }
 
 Wall Board::flip_horizontal(Wall wall) const {
