@@ -1,5 +1,7 @@
 build*/
 libtorch/
+scripts/.ipynb_checkpoints
+scripts/__pycache__
 compile_commands.json
 .cache
 model.pt
