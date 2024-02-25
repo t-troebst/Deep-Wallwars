@@ -9,6 +9,7 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 
 find_package(CUDAToolkit REQUIRED)
 find_package(gflags REQUIRED)
+find_package(glog REQUIRED)
 find_package(folly REQUIRED)
 # TODO: find TensorRT with CMake
 
