@@ -230,7 +230,7 @@ std::istream& operator>>(std::istream& in, Cell& cell) {
     in >> column_label >> row_label;
 
     cell.column = column_label - 'a';
-    cell.row = row_label == 'X' ? 9 : row_label - '0';
+    cell.row = row_label == 'X' ? 9 : row_label - '1';
 
     // TODO: validate
 
