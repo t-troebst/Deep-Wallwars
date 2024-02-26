@@ -36,6 +36,7 @@ struct Wall {
     Cell cell;
     enum Type { Right, Down } type;
 
+    Wall() = default;
     Wall(Cell cell, Type type);
     Wall(Cell cell, Direction direction);
 
@@ -86,7 +87,7 @@ std::ostream& operator<<(std::ostream& out, Turn turn);
 
 std::istream& operator>>(std::istream& out, Cell& cell);
 std::istream& operator>>(std::istream& out, Wall& wall);
-std::istream& operator>>(std::istream& out, Action& cell);
+std::istream& operator>>(std::istream& in, Direction& dir);
 
 class Board {
 public:

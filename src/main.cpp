@@ -38,6 +38,8 @@ DEFINE_double(move_prior, 0.3, "Move prior of simple agent");
 DEFINE_double(good_move, 1.5, "Good move bias of simple agent");
 DEFINE_double(bad_move, 0.75, "Bad move bias of simple agent");
 
+DEFINE_bool(interactive, false, "Enable interactive play against the AI");
+
 struct Logger : nv::ILogger {
     void log(Severity severity, char const* msg) noexcept {
         switch (severity) {
@@ -165,6 +167,24 @@ void evaluate_simple(nv::IRuntime& runtime, std::string const& model1, bool mode
     }
 }
 
+void interactive(nv::IRuntime& runtime, std::string const& model) {
+    std::ifstream model1_file(model, std::ios::binary);
+    auto engine1 = load_serialized_engine(runtime, model1_file);
+    auto batched_model1 =
+        std::make_shared<BatchedModel>(std::make_unique<TensorRTModel>(*engine1), 4096);
+    BatchedModelPolicy batched_model_policy1(batched_model1);
+    CachedPolicy cached_policy1(batched_model_policy1, FLAGS_cache_size);
+
+    Board board{FLAGS_columns, FLAGS_rows};
+    folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
+    folly::coro::blockingWait(human_play(board, cached_policy1,
+                                         {
+                                             .samples = FLAGS_samples,
+                                             .seed = FLAGS_seed,
+                                         })
+                                  .scheduleOn(&thread_pool));
+}
+
 int main(int argc, char** argv) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -173,7 +193,9 @@ int main(int argc, char** argv) {
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    if (FLAGS_model2 == "") {
+    if (FLAGS_interactive) {
+        interactive(*runtime, FLAGS_model1);
+    } else if (FLAGS_model2 == "") {
         train(*runtime, FLAGS_model1);
     } else if (FLAGS_model2 == "simple") {
         evaluate_simple(*runtime, FLAGS_model1, true);

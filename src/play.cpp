@@ -5,6 +5,7 @@
 #include <folly/experimental/coro/Task.h>
 #include <folly/logging/xlog.h>
 
+#include <iostream>
 #include <ranges>
 
 #include "mcts.hpp"
@@ -15,6 +16,66 @@ struct GameResult {
     std::optional<Player> winner;
     int wasted_inferences;
 };
+
+folly::coro::Task<> human_play(Board board, EvaluationFunction model,
+                               HumanPlayOptions const& opts) {
+    MCTS mcts{
+        model, std::move(board), {.max_parallelism = opts.max_parallel_samples, .seed = opts.seed}};
+
+    auto const check_winner = [&] {
+        auto winner = mcts.current_board().winner();
+
+        if (!winner) {
+            return false;
+        }
+
+        if (*winner == Player::Red) {
+            XLOG(INFO, "AI won!");
+        } else {
+            XLOG(INFO, "Player won!");
+        }
+
+        return true;
+    };
+
+    while (true) {
+        Cell current_pos = mcts.current_board().position(Player::Red);
+        co_await mcts.sample(opts.samples);
+        Action action_1 = mcts.commit_to_action();
+        if (check_winner()) {
+            break;
+        }
+
+        co_await mcts.sample(opts.samples);
+        Action action_2 = mcts.commit_to_action();
+        if (check_winner()) {
+            break;
+        }
+
+        Move move{action_1, action_2};
+        std::cout << move.standard_notation(current_pos) << '\n';
+
+        // TODO: read in standard notation instead of this ad hoc solution
+        for (int i = 0; i < 2; ++i) {
+            std::string action_type;
+            std::cin >> action_type;
+
+            if (action_type == "step") {
+                Direction dir;
+                std::cin >> dir;
+                mcts.force_action(dir);
+            } else if (action_type == "wall") {
+                Wall wall;
+                std::cin >> wall;
+                mcts.force_action(wall);
+            }
+
+            if (check_winner()) {
+                break;
+            }
+        }
+    }
+}
 
 folly::coro::Task<GameResult> computer_play_single(const Board& board, EvaluationFunction evaluate1,
                                                    EvaluationFunction evaluate2,

@@ -255,6 +255,25 @@ std::istream& operator>>(std::istream& in, Wall& wall) {
     return in;
 }
 
+std::istream& operator>>(std::istream& in, Direction& dir) {
+    std::string direction;
+    in >> direction;
+
+    if (direction == "right") {
+        dir = Direction::Right;
+    } else if (direction == "left") {
+        dir = Direction::Left;
+    } else if (direction == "down") {
+        dir = Direction::Down;
+    } else if (direction == "up") {
+        dir = Direction::Up;
+    } else {
+        throw std::runtime_error("Invalid direction!");
+    }
+
+    return in;
+}
+
 Board::Board(int columns, int rows, Cell red_start, Cell red_goal, Cell blue_start, Cell blue_goal)
     : m_red{red_start, red_goal},
       m_blue{blue_start, blue_goal},

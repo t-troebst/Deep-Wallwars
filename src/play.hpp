@@ -11,6 +11,13 @@
 // training data.
 using CompletionCallback = std::function<void(MCTS const&)>;
 
+struct HumanPlayOptions {
+    int threads = 4;
+    int samples = 1000;
+    int max_parallel_samples = 16;
+    std::uint32_t seed = 42;
+};
+
 struct ComputerPlayOptions {
     int threads = 4;
     int samples = 1000;
@@ -21,6 +28,9 @@ struct ComputerPlayOptions {
     std::uint32_t seed = 42;
     CompletionCallback on_complete = [](MCTS const&) {};
 };
+
+folly::coro::Task<> human_play(Board board, EvaluationFunction model,
+                               HumanPlayOptions const& opts = {});
 
 folly::coro::Task<double> computer_play(Board board, EvaluationFunction evaluate1,
                                         EvaluationFunction evaluate2, int games,
