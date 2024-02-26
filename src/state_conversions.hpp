@@ -1,6 +1,7 @@
 #pragma once
 
 #include <folly/Synchronized.h>
+
 #include <iosfwd>
 #include <vector>
 
@@ -18,7 +19,7 @@ using ModelInput = std::vector<float>;
 // Converts current position in the MCTS tree into the output that we would have expected from the
 // ML model. This is used for training. The expected output value is a convex combination of the
 // actual winner and the MCTS value.
-ModelOutput convert_to_model_output(NodeInfo const& node_info, std::optional<Player> winner,
+ModelOutput convert_to_model_output(NodeInfo const& node_info, float score_for_red,
                                     float winner_contribution);
 
 // Converts current board state into a vector of [0, 1] floats so it can be used for ML models.

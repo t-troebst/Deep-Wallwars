@@ -2,7 +2,7 @@
 
 #include <folly/Overload.h>
 
-ModelOutput convert_to_model_output(NodeInfo const& node_info, std::optional<Player> winner,
+ModelOutput convert_to_model_output(NodeInfo const& node_info, float score_for_red,
                                     float winner_contribution) {
     std::size_t board_size = node_info.board.columns() * node_info.board.rows();
 
@@ -32,7 +32,7 @@ ModelOutput convert_to_model_output(NodeInfo const& node_info, std::optional<Pla
             });
     }
 
-    float const z_value = winner ? (*winner == node_info.turn.player ? 1 : -1) : 0;
+    float const z_value = node_info.turn.player == Player::Red ? score_for_red : -score_for_red;
     float const expected_value =
         (1 - winner_contribution) * node_info.q_value + winner_contribution * z_value;
     return {std::move(wall_prior), step_prior, expected_value};
@@ -88,20 +88,21 @@ TrainingDataPrinter::TrainingDataPrinter(std::ostream& out, float winner_contrib
       m_winner_contribution{winner_contribution} {}
 
 void TrainingDataPrinter::operator()(MCTS const& out) const {
-    std::optional<Player> winner = out.current_board().winner();
+    float score_for_red = out.current_board().score_for(Player::Red);
 
     auto locked_output = m_output->wlock();
 
     for (NodeInfo const& node_info : out.history()) {
         ModelInput model_input = convert_to_model_input(node_info.board, node_info.turn);
         ModelOutput model_output =
-            convert_to_model_output(node_info, winner, m_winner_contribution);
+            convert_to_model_output(node_info, score_for_red, m_winner_contribution);
         print_training_data_point(**locked_output, model_input, model_output);
     }
 
     // The history does not include the actual winning board state.
     NodeInfo const& node_info = out.root_info();
     ModelInput model_input = convert_to_model_input(node_info.board, node_info.turn);
-    ModelOutput model_output = convert_to_model_output(node_info, winner, m_winner_contribution);
+    ModelOutput model_output =
+        convert_to_model_output(node_info, score_for_red, m_winner_contribution);
     print_training_data_point(**locked_output, model_input, model_output);
 }
