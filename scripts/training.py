@@ -72,6 +72,13 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
+    "-s",
+    "--samples",
+    help="Number of samples to use per action during self play",
+    default=5000,
+    type=int,
+)
+parser.add_argument(
     "--epochs",
     help="Number of epochs to train per training loop",
     default=2,
@@ -145,6 +152,8 @@ def run_self_play(model1, model2, generation):
                 str(args.threads),
                 "-games",
                 str(args.games),
+                "-samples",
+                str(args.samples),
             ],
             stdout=f,
             stderr=f,
