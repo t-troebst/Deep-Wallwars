@@ -251,7 +251,7 @@ void MCTS::add_root_noise() {
     std::vector<float> samples(m_root->edges.size());
 
     for (float& s : samples) {
-        total += s = m_gamma_dist(m_twister);
+        total += (s = m_gamma_dist(m_twister));
     }
 
     for (std::size_t i = 0; i < samples.size(); ++i) {
