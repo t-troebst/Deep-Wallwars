@@ -59,27 +59,11 @@ struct Logger : nv::ILogger {
     }
 };
 
-std::vector<std::unique_ptr<Model>> get_models(nv::ICudaEngine& engine, int n) {
-    std::vector<std::unique_ptr<Model>> result;
-
-    for (int i = 0; i < n; ++i) {
-        result.push_back(std::make_unique<TensorRTModel>(engine));
-    }
-
-    return result;
-}
-
-struct Models {
-    std::vector<std::unique_ptr<nv::ICudaEngine>> engines;
-    EvaluationFunction model1;
-    EvaluationFunction model2;
-};
-
 void train(nv::IRuntime& runtime, std::string const& model) {
     std::ifstream model_file(model, std::ios::binary);
     auto engine = load_serialized_engine(runtime, model_file);
-    auto trt_models = get_models(*engine, 1);
-    auto batched_model = std::make_shared<BatchedModel>(std::move(trt_models), 4096);
+    auto batched_model =
+        std::make_shared<BatchedModel>(std::make_unique<TensorRTModel>(*engine), 4096);
 
     TrainingDataPrinter training_data_printer(FLAGS_output, 0.5);
 
