@@ -1,148 +1,226 @@
 import torch
-import sys
 import torch.onnx
-import torch.utils
-import torch.utils.data
+import subprocess
+import argparse
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.functional as F
+from fastai.data.all import DataLoader, DataLoaders
+from fastai.learner import Learner
+
 from model import ResNet
+from data import get_datasets
 
 device = torch.device("cuda:0")
+input_channels = 7
 
-columns = 5
-rows = 5
-channels = 64
-layers = 10
-epochs = 20
-training_batch_size = 64
-inference_batch_size = 256
-kl_loss_scale = 0.1
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--deep_ww", help="Path to deep wallwars executable", default="../build/deep_ww"
+)
+parser.add_argument("--models", help="Path to store the models", default="../models")
+parser.add_argument("--data", help="Path to store training data", default="../data")
+parser.add_argument("-c", "--columns", help="Number of columns", default=6, type=int)
+parser.add_argument("-r", "--rows", help="Number of rows", default=6, type=int)
+parser.add_argument(
+    "--generations",
+    help="Number of generations to train for",
+    default=40,
+    type=int,
+)
+parser.add_argument(
+    "--training-batch-size",
+    help="Batch size used during training",
+    default=512,
+    type=int,
+)
+parser.add_argument(
+    "--inference-batch-size",
+    help="Batch size used during inference (self-play)",
+    default=128,
+    type=int,
+)
+parser.add_argument(
+    "--hidden_channels",
+    help="Number of channels to use in the hidden layers of the ResNet",
+    default=32,
+    type=int,
+)
+parser.add_argument(
+    "--layers",
+    help="Number of layers in the ResNet",
+    default=20,
+    type=int,
+)
+parser.add_argument(
+    "--learning-rate",
+    help="Learning rate to use during training",
+    default=0.02,
+    type=float,
+)
+parser.add_argument(
+    "--max-training-window",
+    help="Determines the maximum number of past generations used for training data",
+    default=20,
+    type=int,
+)
+parser.add_argument(
+    "--training-games",
+    help="Determines the maximum number of games used for training data",
+    default=20000,
+    type=int,
+)
+parser.add_argument(
+    "--games",
+    help="Number of games to play in one iteration of self play",
+    default=5000,
+    type=int,
+)
+parser.add_argument(
+    "--kl_loss_scale",
+    help="Scaling factor for the KL loss on the action distribution",
+    default=0.1,
+    type=float,
+)
+parser.add_argument(
+    "--epochs",
+    help="Number of epochs to train per training loop",
+    default=2,
+    type=int,
+)
+parser.add_argument(
+    "-j",
+    "--threads",
+    help="Number of threads to use for sample generation during self play",
+    default=20,
+    type=int,
+)
+parser.add_argument(
+    "--log",
+    help="Log file location",
+    default="log.txt",
+)
+args = parser.parse_args()
 
-data_folder = sys.argv[1]
-models_folder = sys.argv[2]
-generation = int(sys.argv[3])
 
-class Snapshots(torch.utils.data.Dataset):
-    def __init__(self, columns, rows, file_name):
-        self.data = [[], [], [], []]
-        i = 0
-        with open(file_name) as f:
-            for line in f.readlines():
-                if line.strip() == "":
-                    i = 0
-                    continue
-
-                t = torch.tensor([float(x) for x in line.split(", ")])
-
-                if i == 0:
-                    t = t.view(7, columns, rows)
-                self.data[i].append(t)
-                i += 1
-
-    def __len__(self):
-        return len(self.data[0])
-
-    def __getitem__(self, index):
-        return [self.data[x][index] for x in range(4)]
-
-def loss_fn(wp_out, sp_out, vs_out, wp_label, sp_label, vs_label):
-    kl_div = nn.KLDivLoss(reduction="sum")
-    mse = nn.MSELoss(reduction="sum")
-
-    actions_out = torch.cat([wp_out, sp_out], dim=1)
-    log_probs = F.log_softmax(actions_out, dim=1)
-
-    actions_label = torch.cat([wp_label, sp_label], dim=1)
-
-    kl_loss = kl_loss_scale * kl_div(log_probs, actions_label)
-    mse_loss = mse(vs_out, vs_label)
-
-    return (kl_loss, mse_loss)
+def get_training_paths(generation):
+    lb = max(generation - args.max_training_window, (generation - 1) // 2)
+    return [f"{args.data}/generation_{i}" for i in range(lb, generation)]
 
 
-def save_model(model, folder):
-    torch.save(model, f"{folder}/model_{generation}.pt")
+def save_model(model, name):
+    torch.save(model, f"{args.models}/{name}.pt")
     input_names = ["States"]
     output_names = ["WallPriors", "StepPriors", "Values"]
-    dummy_input = torch.randn(inference_batch_size, 7, columns, rows).to(device)
+    dummy_input = torch.randn(
+        args.inference_batch_size, input_channels, args.columns, args.rows
+    ).to(device)
+    print("Exporting onnx...")
     torch.onnx.export(
         model,
         dummy_input,
-        f"{folder}/model_{generation}.onnx",
+        f"{args.models}/{name}.onnx",
         input_names=input_names,
         output_names=output_names,
     )
-
-
-if generation == 0:
-    model = ResNet(columns, rows, channels, layers).to(device)
-    save_model(model, models_folder)
-    exit()
-else:
-    model = torch.load(f"{models_folder}/model_{generation - 1}.pt").to(device)
-
-
-training_window = range((generation - 1) // 2, generation)
-snapshots = torch.utils.data.ConcatDataset(
-    [
-        Snapshots(columns, rows, f"{data_folder}/snapshots_{i}.csv")
-        for i in training_window
-    ]
-)
-training_data, eval_data = torch.utils.data.random_split(snapshots, [0.8, 0.2])
-training_loader = torch.utils.data.DataLoader(
-    training_data,
-    batch_size=training_batch_size,
-    shuffle=True,
-    num_workers=4,
-    pin_memory=True,
-)
-eval_loader = torch.utils.data.DataLoader(
-    eval_data,
-    batch_size=training_batch_size,
-    num_workers=4,
-    pin_memory=True,
-    shuffle=False,
-)
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.02)
-
-kl_losses = []
-mse_losses = []
-
-try:
-    for epoch in range(epochs):
-        for states, wall_priors, step_priors, values in training_loader:
-            states = states.to(device)
-            wall_priors = wall_priors.to(device)
-            step_priors = step_priors.to(device)
-            values = values.to(device)
-
-            optimizer.zero_grad()
-            wp, sp, vs = model.forward(states)
-            loss = sum(loss_fn(wp, sp, vs, wall_priors, step_priors, values))
-
-            loss.backward()
-            optimizer.step()
-            del loss
-
-        model.train(False)
-        total_kl_loss = 0
-        total_mse_loss = 0
-        for states, wall_priors, step_priors, values in eval_loader:
-            states = states.to(device)
-            wall_priors = wall_priors.to(device)
-            step_priors = step_priors.to(device)
-            values = values.to(device)
-            wp, sp, vs = model.forward(states)
-            kl_loss, mse_loss = loss_fn(wp, sp, vs, wall_priors, step_priors, values)
-            total_kl_loss += float(kl_loss)
-            total_mse_loss += float(mse_loss)
-        kl_losses.append(total_kl_loss / len(eval_data))
-        mse_losses.append(total_mse_loss / len(eval_data))
-        print(
-            f"Average loss in epoch {epoch} of generation {generation}: {total_kl_loss / len(eval_data)} + {total_mse_loss / len(eval_data)} = {(total_kl_loss + total_mse_loss) / len(eval_data)}."
+    print("Converting onnx to trt...")
+    with open(args.log, "a") as f:
+        subprocess.run(
+            [
+                "trtexec",
+                f"--onnx={args.models}/{name}.onnx",
+                f"--saveEngine={args.models}/{name}.trt",
+            ],
+            stdout=f,
+            stderr=f,
         )
-except KeyboardInterrupt:
-    print("Trainig was interrupted.")
 
-save_model(model, models_folder)
+
+def run_self_play(model1, model2, generation):
+    print(f"Running self play (generation {generation})...")
+    with open(args.log, "a") as f:
+        subprocess.run(
+            [
+                args.deep_ww,
+                "-model1",
+                model1,
+                "-model2",
+                model2,
+                "-output",
+                f"{args.data}/generation_{generation}",
+                "-columns",
+                str(args.columns),
+                "-rows",
+                str(args.rows),
+                "-j",
+                str(args.threads),
+                "-games",
+                str(args.games),
+            ],
+            stdout=f,
+            stderr=f,
+        )
+
+
+def predict_valuation(xs):
+    return torch.where(xs[2] >= 0.1, 1.0, 0.0) + torch.where(xs[2] <= 0.1, -1.0, 0.0)
+
+
+def valuation_accuracy(xs, ys):
+    return (predict_valuation(xs) == predict_valuation(ys)).float().mean()
+
+
+def predict_move(xs):
+    return torch.max(xs[1], 1).indices
+
+
+def move_accuracy(xs, ys):
+    return (predict_move(xs) == predict_move(ys)).float().mean()
+
+
+def loss(out, label):
+    wp_out, sp_out, vs_out = out
+    wp_label, sp_label, vs_label = label
+
+    mse = nn.MSELoss()
+    return mse(wp_out, wp_label) + mse(sp_out, sp_label) + mse(vs_out, vs_label)
+
+
+def train_model(model, generation):
+    print(f"Loading training data (generation {generation})...")
+    training_data, valid_data = get_datasets(
+        get_training_paths(generation), args.training_games, args.columns, args.rows
+    )
+    training_loader = DataLoader(
+        training_data,
+        bs=args.training_batch_size,
+        device=device,
+        pin_memory=True,
+        shuffle=True,
+        num_workers=4,
+    )
+    valid_loader = DataLoader(
+        valid_data,
+        bs=args.training_batch_size,
+        device=device,
+        pin_memory=True,
+        num_workers=4,
+    )
+    loaders = DataLoaders(training_loader, valid_loader)
+
+    learner = Learner(
+        loaders, model, loss_func=loss, metrics=[valuation_accuracy, move_accuracy]
+    )
+    print(f"Training (generation {generation})...")
+    learner.fit(args.epochs, args.learning_rate)
+
+
+# Bootstrap generation 0 data
+run_self_play("simple", "simple", 0)
+model = ResNet(args.columns, args.rows, args.hidden_channels, args.layers)
+train_model(model, 1)
+save_model(model, "model_1")
+
+for generation in range(2, args.generations + 1):
+    run_self_play(f"{args.models}/model_{generation - 1}.trt", "", generation - 1)
+    train_model(model, generation)
+    save_model(model, f"model_{generation}")
