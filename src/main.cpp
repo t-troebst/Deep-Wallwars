@@ -106,6 +106,22 @@ void train(nv::IRuntime& runtime, std::string const& model) {
           double(inferences) / batches);
 }
 
+void train_simple() {
+    SimplePolicy simple_policy(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
+
+    Board board{FLAGS_columns, FLAGS_rows};
+    TrainingDataPrinter training_data_printer(FLAGS_output, 0.5);
+
+    folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
+    folly::coro::blockingWait(computer_play(board, simple_policy, simple_policy, FLAGS_games,
+                                            {
+                                                .samples = FLAGS_samples,
+                                                .seed = FLAGS_seed,
+                                                .on_complete = training_data_printer,
+                                            })
+                                  .scheduleOn(&thread_pool));
+}
+
 void evaluate(nv::IRuntime& runtime, std::string const& model1, std::string const& model2) {
     std::ifstream model1_file(model1, std::ios::binary);
     auto engine1 = load_serialized_engine(runtime, model1_file);
@@ -194,6 +210,8 @@ int main(int argc, char** argv) {
 
     if (FLAGS_interactive) {
         interactive(*runtime, FLAGS_model1);
+    } else if (FLAGS_model1 == "simple" && FLAGS_model2 == "simple") {
+        train_simple();
     } else if (FLAGS_model2 == "") {
         train(*runtime, FLAGS_model1);
     } else if (FLAGS_model2 == "simple") {
