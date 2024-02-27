@@ -36,6 +36,36 @@ TEST_CASE("Empty board", "[Game State]") {
     REQUIRE_FALSE(board.winner());
 }
 
+TEST_CASE("Big board", "[Game State]") {
+    Board board{8, 8};
+
+    board.place_wall(Player::Red, {{1, 3}, Direction::Right});
+    board.place_wall(Player::Red, {{4, 4}, Direction::Right});
+
+    board.take_step(Player::Blue, Direction::Down);
+    board.take_step(Player::Blue, Direction::Down);
+
+    board.place_wall(Player::Red, {{0, 3}, Direction::Down});
+    board.place_wall(Player::Red, {{0, 7}, Direction::Right});
+
+    board.take_step(Player::Blue, Direction::Down);
+    board.take_step(Player::Blue, Direction::Down);
+
+    board.place_wall(Player::Red, {{1, 4}, Direction::Down});
+    board.place_wall(Player::Red, {{4, 3}, Direction::Right});
+
+    board.take_step(Player::Blue, Direction::Left);
+    board.take_step(Player::Blue, Direction::Down);
+
+    board.take_step(Player::Red, Direction::Right);
+    board.take_step(Player::Red, Direction::Right);
+
+    board.place_wall(Player::Blue, {{2, 0}, Direction::Right});
+    board.place_wall(Player::Blue, {{2, 0}, Direction::Down});
+
+    REQUIRE(board.legal_directions(Player::Red).size() == 1);
+}
+
 TEST_CASE("Advance to win", "[Game State]") {
     Board board{3, 3, {0, 0}, {2, 2}, {2, 0}, {0, 2}};
 
