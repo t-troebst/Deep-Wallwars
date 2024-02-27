@@ -9,7 +9,7 @@
 
 // Called once for each game with the winner after the MCTS has finished. Can be used to output
 // training data.
-using CompletionCallback = std::function<void(MCTS const&)>;
+using CompletionCallback = std::function<void(MCTS const&, int)>;
 
 struct HumanPlayOptions {
     int threads = 4;
@@ -26,7 +26,7 @@ struct ComputerPlayOptions {
     int move_limit = 100;
     double temperature = 0.2;
     std::uint32_t seed = 42;
-    CompletionCallback on_complete = [](MCTS const&) {};
+    CompletionCallback on_complete = [](MCTS const&, int) {};
 };
 
 folly::coro::Task<> human_play(Board board, EvaluationFunction model,

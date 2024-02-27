@@ -2,6 +2,9 @@
 
 #include <folly/Overload.h>
 
+#include <filesystem>
+#include <fstream>
+
 ModelOutput convert_to_model_output(NodeInfo const& node_info, float score_for_red,
                                     float winner_contribution) {
     std::size_t board_size = node_info.board.columns() * node_info.board.rows();
@@ -83,20 +86,21 @@ void print_training_data_point(std::ostream& out_stream, ModelInput const& model
     out_stream << model_output.value << "\n\n";
 }
 
-TrainingDataPrinter::TrainingDataPrinter(std::ostream& out, float winner_contribution)
-    : m_output{std::make_shared<folly::Synchronized<std::ostream*>>(&out)},
-      m_winner_contribution{winner_contribution} {}
+TrainingDataPrinter::TrainingDataPrinter(std::filesystem::path directory, float winner_contribution)
+    : m_directory{std::move(directory)}, m_winner_contribution{winner_contribution} {
+    std::filesystem::create_directory(m_directory);
+}
 
-void TrainingDataPrinter::operator()(MCTS const& out) const {
+void TrainingDataPrinter::operator()(MCTS const& out, int index) const {
     float score_for_red = out.current_board().score_for(Player::Red);
 
-    auto locked_output = m_output->wlock();
+    std::ofstream output_file{m_directory / ("game_" + std::to_string(index) + ".csv")};
 
     for (NodeInfo const& node_info : out.history()) {
         ModelInput model_input = convert_to_model_input(node_info.board, node_info.turn);
         ModelOutput model_output =
             convert_to_model_output(node_info, score_for_red, m_winner_contribution);
-        print_training_data_point(**locked_output, model_input, model_output);
+        print_training_data_point(output_file, model_input, model_output);
     }
 
     // The history does not include the actual winning board state.
@@ -104,5 +108,5 @@ void TrainingDataPrinter::operator()(MCTS const& out) const {
     ModelInput model_input = convert_to_model_input(node_info.board, node_info.turn);
     ModelOutput model_output =
         convert_to_model_output(node_info, score_for_red, m_winner_contribution);
-    print_training_data_point(**locked_output, model_input, model_output);
+    print_training_data_point(output_file, model_input, model_output);
 }

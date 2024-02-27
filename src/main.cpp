@@ -23,7 +23,7 @@ namespace nv = nvinfer1;
 
 DEFINE_string(model1, "model.trt", "Serialized TensorRT Model 1 ");
 DEFINE_string(model2, "", "Serialized TensorRT Model 2");
-DEFINE_string(snapshots, "snapshots.csv", "Output for training");
+DEFINE_string(output, "data", "Folder to print training data to");
 DEFINE_uint32(seed, 42, "Random seed");
 DEFINE_uint64(cache_size, 100'000, "Size of the internal evaluation cache");
 
@@ -81,8 +81,7 @@ void train(nv::IRuntime& runtime, std::string const& model) {
     auto trt_models = get_models(*engine, 2);
     auto batched_model = std::make_shared<BatchedModel>(std::move(trt_models), 4096);
 
-    std::ofstream snapshots_file(FLAGS_snapshots);
-    TrainingDataPrinter training_data_printer(snapshots_file, 1.0);
+    TrainingDataPrinter training_data_printer(FLAGS_output, 0.5);
 
     BatchedModelPolicy batched_model_policy(batched_model);
     CachedPolicy cached_policy(batched_model_policy, FLAGS_cache_size);

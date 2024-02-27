@@ -78,11 +78,17 @@ folly::coro::Task<> human_play(Board board, EvaluationFunction model,
 }
 
 folly::coro::Task<GameResult> computer_play_single(const Board& board, EvaluationFunction evaluate1,
-                                                   EvaluationFunction evaluate2,
-                                                   std::uint32_t index,
+                                                   EvaluationFunction evaluate2, int index,
                                                    ComputerPlayOptions const& opts) {
-    MCTS mcts1{evaluate1, board, {.max_parallelism = opts.max_parallel_samples, .seed = index}};
-    MCTS mcts2{evaluate2, board, {.max_parallelism = opts.max_parallel_samples, .seed = index}};
+    MCTS mcts1{
+        evaluate1,
+        board,
+        {.max_parallelism = opts.max_parallel_samples, .seed = static_cast<std::uint32_t>(index)}};
+
+    MCTS mcts2{
+        evaluate2,
+        board,
+        {.max_parallelism = opts.max_parallel_samples, .seed = static_cast<std::uint32_t>(index)}};
 
     XLOGF(INFO, "Starting game {}.", index);
 
@@ -94,8 +100,8 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
 
             if (mcts1.current_board().winner()) {
                 XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
-                opts.on_complete(mcts1);
-                opts.on_complete(mcts2);
+                opts.on_complete(mcts1, index);
+                opts.on_complete(mcts2, index);
                 co_return {Player::Red, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
             }
         }
@@ -107,16 +113,16 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
 
             if (mcts2.current_board().winner()) {
                 XLOGF(INFO, "Blue player won game {} in {} moves.", index, num_moves);
-                opts.on_complete(mcts1);
-                opts.on_complete(mcts2);
+                opts.on_complete(mcts1, index);
+                opts.on_complete(mcts2, index);
                 co_return {Player::Blue, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
             }
         }
     }
 
     XLOGF(INFO, "Game {} was ended because it hit the move limit of {}", index, opts.move_limit);
-    opts.on_complete(mcts1);
-    opts.on_complete(mcts2);
+    opts.on_complete(mcts1, index);
+    opts.on_complete(mcts2, index);
     co_return {{}, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
 }
 

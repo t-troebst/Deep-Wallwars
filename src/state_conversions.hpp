@@ -1,7 +1,6 @@
 #pragma once
 
-#include <folly/Synchronized.h>
-
+#include <filesystem>
 #include <iosfwd>
 #include <vector>
 
@@ -32,11 +31,11 @@ void print_training_data_point(std::ostream& out_stream, ModelInput const& input
 
 class TrainingDataPrinter {
 public:
-    TrainingDataPrinter(std::ostream& output, float winner_contribution = 0.5);
+    TrainingDataPrinter(std::filesystem::path directory, float winner_contribution = 0.5);
 
-    void operator()(MCTS const& mcts) const;
+    void operator()(MCTS const& mcts, int index) const;
 
 private:
-    std::shared_ptr<folly::Synchronized<std::ostream*>> m_output;
+    std::filesystem::path m_directory;
     float m_winner_contribution;
 };
