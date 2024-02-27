@@ -19,6 +19,11 @@ struct GameResult {
 
 folly::coro::Task<> human_play(Board board, EvaluationFunction model,
                                HumanPlayOptions const& opts) {
+    std::cout << "Go first (y/n): ";
+    char first;
+    std::cin >> first;
+    auto human = first == 'y' ? Player::Red : Player::Blue;
+
     MCTS mcts{
         model, std::move(board), {.max_parallelism = opts.max_parallel_samples, .seed = opts.seed}};
 
@@ -29,31 +34,33 @@ folly::coro::Task<> human_play(Board board, EvaluationFunction model,
             return false;
         }
 
-        if (*winner == Player::Red) {
-            XLOG(INFO, "AI won!");
-        } else {
+        if (*winner == human) {
             XLOG(INFO, "Player won!");
+        } else {
+            XLOG(INFO, "AI won!");
         }
 
         return true;
     };
 
     while (true) {
-        Cell current_pos = mcts.current_board().position(Player::Red);
-        co_await mcts.sample(opts.samples);
-        Action action_1 = mcts.commit_to_action();
-        if (check_winner()) {
-            break;
-        }
+        if (first != 'y' || mcts.history().size() != 0) {
+            Cell current_pos = mcts.current_board().position(other_player(human));
+            co_await mcts.sample(opts.samples);
+            Action action_1 = mcts.commit_to_action();
+            if (check_winner()) {
+                break;
+            }
 
-        co_await mcts.sample(opts.samples);
-        Action action_2 = mcts.commit_to_action();
-        if (check_winner()) {
-            break;
-        }
+            co_await mcts.sample(opts.samples);
+            Action action_2 = mcts.commit_to_action();
+            if (check_winner()) {
+                break;
+            }
 
-        Move move{action_1, action_2};
-        std::cout << move.standard_notation(current_pos) << '\n';
+            Move move{action_1, action_2};
+            std::cout << move.standard_notation(current_pos) << '\n';
+        }
 
         // TODO: read in standard notation instead of this ad hoc solution
         for (int i = 0; i < 2; ++i) {
