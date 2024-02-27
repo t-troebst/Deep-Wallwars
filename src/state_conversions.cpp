@@ -88,7 +88,7 @@ TrainingDataPrinter::TrainingDataPrinter(std::filesystem::path directory, float 
 }
 
 void TrainingDataPrinter::operator()(MCTS const& out, int index) const {
-    float score_for_red = out.current_board().score_for(Player::Red) / (out.history().size() + 1);
+    float score_for_red = out.current_board().score_for(Player::Red);
 
     std::ofstream output_file{m_directory / ("game_" + std::to_string(index) + ".csv")};
 
