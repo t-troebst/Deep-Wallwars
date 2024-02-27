@@ -2,6 +2,7 @@ import torch
 import torch.onnx
 import subprocess
 import argparse
+import gc
 import torch.nn as nn
 import torch.functional as F
 from fastai.data.all import DataLoader, DataLoaders
@@ -209,8 +210,10 @@ run_self_play("simple", "simple", 0)
 model = ResNet(args.columns, args.rows, args.hidden_channels, args.layers)
 train_model(model, 1)
 save_model(model, "model_1")
+gc.collect()
 
 for generation in range(2, args.generations + 1):
     run_self_play(f"{args.models}/model_{generation - 1}.trt", "", generation - 1)
     train_model(model, generation)
     save_model(model, f"model_{generation}")
+    gc.collect()
