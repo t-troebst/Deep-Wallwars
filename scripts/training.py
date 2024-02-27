@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.functional as F
 from fastai.data.all import DataLoader, DataLoaders
 from fastai.learner import Learner
+from fastai.callback.schedule import lr_find
 
 from model import ResNet
 from data import get_datasets
@@ -52,12 +53,6 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
-    "--learning-rate",
-    help="Learning rate to use during training",
-    default=0.02,
-    type=float,
-)
-parser.add_argument(
     "--max-training-window",
     help="Determines the maximum number of past generations used for training data",
     default=20,
@@ -74,12 +69,6 @@ parser.add_argument(
     help="Number of games to play in one iteration of self play",
     default=5000,
     type=int,
-)
-parser.add_argument(
-    "--kl_loss_scale",
-    help="Scaling factor for the KL loss on the action distribution",
-    default=0.1,
-    type=float,
 )
 parser.add_argument(
     "--epochs",
@@ -210,8 +199,9 @@ def train_model(model, generation):
     learner = Learner(
         loaders, model, loss_func=loss, metrics=[valuation_accuracy, move_accuracy]
     )
-    print(f"Training (generation {generation})...")
-    learner.fit(args.epochs, args.learning_rate)
+    learning_rate = learner.lr_find(show_plot=False)[0]
+    print(f"Training generation {generation} with learning rate {learning_rate}...")
+    learner.fit(args.epochs, learning_rate)
 
 
 # Bootstrap generation 0 data
