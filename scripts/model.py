@@ -19,18 +19,10 @@ class ResNet(nn.Module):
             nn.ReLU()
         )
 
-        self.wall_priors = nn.Sequential(
+        self.priors = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(32 * columns * rows, 2 * columns * rows),
-            nn.Sigmoid(),
-            # TODO: not supported...
-            # nn.Unflatten(1, [2, columns, rows])
-        )
-
-        self.step_priors = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(32 * columns * rows, 4),
-            nn.Sigmoid()
+            nn.Linear(32 * columns * rows, 2 * columns * rows + 4),
+            nn.LogSoftmax(dim=1),
         )
 
         self.value = nn.Sequential(
@@ -49,11 +41,9 @@ class ResNet(nn.Module):
             x = layer.forward(x)
 
         priors = self.priors.forward(x)
-        wall_priors = self.wall_priors.forward(priors)
-        step_priors = self.step_priors.forward(priors)
         value = self.value.forward(x)
 
-        return wall_priors, step_priors, value
+        return priors, value
 
 class ResLayer(nn.Module):
     def __init__(self, channels):

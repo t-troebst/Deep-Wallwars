@@ -100,7 +100,7 @@ def get_training_paths(generation):
 def save_model(model, name):
     torch.save(model, f"{args.models}/{name}.pt")
     input_names = ["States"]
-    output_names = ["WallPriors", "StepPriors", "Values"]
+    output_names = ["Priors", "Values"]
     dummy_input = torch.randn(
         args.inference_batch_size, input_channels, args.columns, args.rows
     ).to(device)
@@ -152,7 +152,7 @@ def run_self_play(model1, model2, generation):
 
 
 def predict_valuation(xs):
-    return torch.where(xs[2] >= 0.1, 1.0, 0.0) + torch.where(xs[2] <= 0.1, -1.0, 0.0)
+    return torch.where(xs[1] >= 0.1, 1.0, 0.0) + torch.where(xs[1] <= 0.1, -1.0, 0.0)
 
 
 def valuation_accuracy(xs, ys):
@@ -160,7 +160,7 @@ def valuation_accuracy(xs, ys):
 
 
 def predict_move(xs):
-    return torch.max(xs[1], 1).indices
+    return torch.max(xs[0], 1).indices
 
 
 def move_accuracy(xs, ys):
@@ -168,11 +168,13 @@ def move_accuracy(xs, ys):
 
 
 def loss(out, label):
-    wp_out, sp_out, vs_out = out
-    wp_label, sp_label, vs_label = label
+    priors_out, values_out = out
+    priors_label, values_label = label
 
     mse = nn.MSELoss()
-    return mse(wp_out, wp_label) + mse(sp_out, sp_label) + mse(vs_out, vs_label)
+    kl_div = nn.KLDivLoss(reduction="batchmean")
+
+    return kl_div(priors_out, priors_label) + mse(values_out, values_label)
 
 
 def train_model(model, generation):

@@ -48,8 +48,7 @@ std::size_t BatchedModel::total_batches() const {
 void BatchedModel::run_worker(std::size_t idx) {
     std::vector<folly::Promise<ModelOutput>> dequeued_promises;
     std::vector<float> states(m_models[idx]->batch_size() * m_models[idx]->state_size());
-    std::vector<float> wall_priors(m_models[idx]->batch_size() * m_models[idx]->wall_prior_size());
-    std::vector<float> step_priors(m_models[idx]->batch_size() * 4);
+    std::vector<float> priors(m_models[idx]->batch_size() * (m_models[idx]->wall_prior_size() + 4));
     std::vector<float> values(m_models[idx]->batch_size());
 
     while (true) {
@@ -70,17 +69,14 @@ void BatchedModel::run_worker(std::size_t idx) {
             dequeued_promises.push_back(std::move(task.output));
         }
 
-        m_models[idx]->inference(states, {wall_priors, step_priors, values});
+        m_models[idx]->inference(states, {priors, values});
 
         for (std::size_t i = 0; i < dequeued_promises.size(); ++i) {
-            std::vector<float> wall_prior{
-                wall_priors.begin() + m_models[idx]->wall_prior_size() * i,
-                wall_priors.begin() + m_models[idx]->wall_prior_size() * (i + 1)};
-            std::array<float, 4> step_prior;
-            std::copy_n(step_priors.begin() + 4 * i, 4, step_prior.begin());
+            std::vector<float> prior{
+                priors.begin() + (m_models[idx]->wall_prior_size() + 4) * i,
+                priors.begin() + (m_models[idx]->wall_prior_size() + 4) * (i + 1)};
 
-            dequeued_promises[i].setValue(
-                ModelOutput{std::move(wall_prior), step_prior, values[i]});
+            dequeued_promises[i].setValue(ModelOutput{std::move(prior), values[i]});
         }
 
         m_batches += 1;

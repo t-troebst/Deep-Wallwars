@@ -23,8 +23,7 @@ private:
 
     CudaStream m_stream;
     CudaBuffer<float> m_states;
-    CudaBuffer<float> m_wall_priors;
-    CudaBuffer<float> m_step_priors;
+    CudaBuffer<float> m_priors;
     CudaBuffer<float> m_values;
 };
 

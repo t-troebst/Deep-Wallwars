@@ -13,11 +13,11 @@ def parse_file(file, columns, rows):
     result = []
     with open(file) as f:
         lines = f.readlines()
-        for i in range(0, len(lines), 5):
+        for i in range(0, len(lines), 4):
             result.append(
                 (
                     tensor_from_csv_line(lines[i]).view(input_channels, columns, rows),
-                    tuple(tensor_from_csv_line(lines[i + j]) for j in range(1, 4)),
+                    tuple(tensor_from_csv_line(lines[i + j]) for j in range(1, 3)),
                 )
             )
     return result

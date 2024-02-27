@@ -1,13 +1,11 @@
 #pragma once
 
 #include <span>
-#include <vector>
 
 class Model {
 public:
     struct Output {
-        std::span<float> wall_priors;
-        std::span<float> step_priors;
+        std::span<float> priors;
         std::span<float> values;
     };
 

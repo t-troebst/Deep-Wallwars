@@ -10,12 +10,7 @@ struct MockModel : Model {
 
     void inference(std::span<float> states, Output const& out) override {
         for (int i = 0; i < m_batch_size; ++i) {
-            out.wall_priors[m_wall_prior_size * i] = states[m_state_size * i];
-
-            for (int j = 0; j < 4; ++j) {
-                out.step_priors[4 * i + j] = j;
-            }
-
+            out.priors[m_wall_prior_size * i] = states[m_state_size * i];
             out.values[i] = i;
         }
     }

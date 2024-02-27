@@ -8,9 +8,7 @@
 ModelOutput convert_to_model_output(NodeInfo const& node_info, float score_for_red,
                                     float winner_contribution) {
     std::size_t board_size = node_info.board.columns() * node_info.board.rows();
-
-    std::vector<float> wall_prior(2 * board_size);
-    std::array<float, 4> step_prior{};
+    std::vector<float> priors(2 * board_size + 4);
 
     // Note: the sum of samples in the children is not equal to the sum of samples in the parent
     // because some samples *end* in the parent. *Typically* only one sample does but due to the
@@ -28,17 +26,17 @@ ModelOutput convert_to_model_output(NodeInfo const& node_info, float score_for_r
         float prior = float(edge_info.num_samples) / total_samples;
 
         folly::variant_match(
-            edge_info.action, [&](Direction dir) { step_prior[int(dir)] = prior; },
+            edge_info.action, [&](Direction dir) { priors[2 * board_size + int(dir)] = prior; },
             [&](Wall wall) {
-                wall_prior[int(wall.type) * board_size +
-                           node_info.board.index_from_cell(wall.cell)] = prior;
+                priors[int(wall.type) * board_size + node_info.board.index_from_cell(wall.cell)] =
+                    prior;
             });
     }
 
     float const z_value = node_info.turn.player == Player::Red ? score_for_red : -score_for_red;
     float const expected_value =
         (1 - winner_contribution) * node_info.q_value + winner_contribution * z_value;
-    return {std::move(wall_prior), step_prior, expected_value};
+    return {std::move(priors), expected_value};
 }
 
 std::vector<float> convert_to_model_input(Board const& board, Turn turn) {
@@ -79,10 +77,8 @@ void print_training_data_point(std::ostream& out_stream, ModelInput const& model
 
     std::copy(model_input.begin(), model_input.end() - 1, it);
     out_stream << model_input.back() << '\n';
-    std::copy(model_output.wall_prior.begin(), model_output.wall_prior.end() - 1, it);
-    out_stream << model_output.wall_prior.back() << '\n';
-    std::copy(model_output.step_prior.begin(), model_output.step_prior.end() - 1, it);
-    out_stream << model_output.step_prior.back() << '\n';
+    std::copy(model_output.prior.begin(), model_output.prior.end() - 1, it);
+    out_stream << model_output.prior.back() << '\n';
     out_stream << model_output.value << "\n\n";
 }
 
@@ -92,7 +88,7 @@ TrainingDataPrinter::TrainingDataPrinter(std::filesystem::path directory, float 
 }
 
 void TrainingDataPrinter::operator()(MCTS const& out, int index) const {
-    float score_for_red = out.current_board().score_for(Player::Red);
+    float score_for_red = out.current_board().score_for(Player::Red) / (out.history().size() + 1);
 
     std::ofstream output_file{m_directory / ("game_" + std::to_string(index) + ".csv")};
 

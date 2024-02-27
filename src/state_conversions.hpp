@@ -8,8 +8,7 @@
 #include "mcts.hpp"
 
 struct ModelOutput {
-    std::vector<float> wall_prior;
-    std::array<float, 4> step_prior;
+    std::vector<float> prior;
     float value;
 };
 
