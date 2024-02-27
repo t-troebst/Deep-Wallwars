@@ -178,6 +178,10 @@ Action MCTS::commit_to_action() {
 }
 
 Action MCTS::commit_to_action(float temperature) {
+    if (temperature == 0.0) {
+        return commit_to_action();
+    }
+
     if (m_root->edges.empty()) {
         throw std::runtime_error("No action available!");
     }
