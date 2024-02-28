@@ -34,26 +34,63 @@ private:
 template <typename T>
 class CudaBuffer {
 public:
-    CudaBuffer();
-    CudaBuffer(std::size_t size);
+    CudaBuffer() : m_device_ptr{nullptr}, m_size{0} {}
 
-    CudaBuffer(CudaBuffer const& other);
-    CudaBuffer(CudaBuffer&& other) noexcept;
+    CudaBuffer(std::size_t size) : m_size{size} {
+        cuda_check(cudaMalloc(&m_device_ptr, size * sizeof(T)));
+    }
 
-    CudaBuffer& operator=(CudaBuffer const& other);
-    CudaBuffer& operator=(CudaBuffer&& other) noexcept;
+    CudaBuffer(CudaBuffer const& other) : m_size{other.m_size} {
+        cuda_check(cudaMalloc(&m_device_ptr, m_size * sizeof(T)));
+        cuda_check(cudaMemcpy(&m_device_ptr, other.m_device_ptr, m_size * sizeof(T),
+                              cudaMemcpyDeviceToDevice));
+    }
 
-    ~CudaBuffer();
+    CudaBuffer(CudaBuffer&& other) noexcept : CudaBuffer() {
+        swap(*this, other);
+    }
 
-    T* device_ptr() const;
-    std::size_t size() const;
+    friend void swap(CudaBuffer& lhs, CudaBuffer& rhs) noexcept {
+        std::swap(lhs.m_device_ptr, rhs.m_device_ptr);
+        std::swap(lhs.m_size, rhs.m_size);
+    }
 
-    void to_device(std::span<T> in, CudaStream& stream);
-    void to_host(std::span<T> out, CudaStream& stream);
+    CudaBuffer& operator=(CudaBuffer other) noexcept {
+        swap(*this, other);
+        return *this;
+    }
+
+    ~CudaBuffer() {
+        cuda_check(cudaFree(m_device_ptr));
+    }
+
+    T* device_ptr() const {
+        return m_device_ptr;
+    }
+
+    std::size_t size() const {
+        return m_size;
+    }
+
+    void to_device(std::span<T> in, CudaStream& stream) {
+        if (in.size() > m_size) {
+            throw std::runtime_error("Cannot upload buffer to device - too large!");
+        }
+
+        cuda_check(cudaMemcpyAsync(m_device_ptr, in.data(), in.size() * sizeof(T),
+                                   cudaMemcpyHostToDevice, stream.get()));
+    }
+
+    void to_host(std::span<T> out, CudaStream& stream) {
+        if (m_size > out.size()) {
+            throw std::runtime_error("Cannot download buffer to host - too large!");
+        }
+
+        cuda_check(cudaMemcpyAsync(out.data(), m_device_ptr, m_size * sizeof(T),
+                                   cudaMemcpyDeviceToHost, stream.get()));
+    }
 
 private:
     T* m_device_ptr;
     std::size_t m_size;
 };
-
-#include "cuda_wrappers_inl.hpp"

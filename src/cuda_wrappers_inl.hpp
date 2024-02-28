@@ -13,50 +13,18 @@ CudaBuffer<T>::CudaBuffer() : m_device_ptr{nullptr}, m_size{0} {}
 
 template <typename T>
 CudaBuffer<T>::CudaBuffer(std::size_t size) : m_size{size} {
-    cuda_check(cudaMalloc(&m_device_ptr, size));
-}
-
-template <typename T>
-CudaBuffer<T>::CudaBuffer(CudaBuffer&& other) noexcept
-    : m_device_ptr{other.m_device_address}, m_size{other.m_size} {
-    other.m_device_ptr = nullptr;
-    other.m_size = 0;
+    cuda_check(cudaMalloc(&m_device_ptr, size * sizeof(T)));
 }
 
 template <typename T>
 CudaBuffer<T>::CudaBuffer(CudaBuffer const& other) : m_size{other.m_size} {
-    cuda_check(cudaMalloc(&m_device_ptr, m_size));
-    cuda_check(cudaMemcpy(&m_device_ptr, other.m_device_ptr, m_size, cudaMemcpyDeviceToDevice));
-}
-
-template <typename T>
-CudaBuffer<T>& CudaBuffer<T>::operator=(CudaBuffer&& other) noexcept {
-    cuda_check(cudaFree(m_device_ptr));
-
-    m_device_ptr = other.m_device_ptr;
-    m_size = other.m_size;
-
-    other.m_device_ptr = nullptr;
-    other.m_size = 0;
-
-    return *this;
+    cuda_check(cudaMalloc(&m_device_ptr, m_size * sizeof(T)));
+    cuda_check(cudaMemcpy(&m_device_ptr, other.m_device_ptr, m_size * sizeof(T), cudaMemcpyDeviceToDevice));
 }
 
 template <typename T>
 CudaBuffer<T>::~CudaBuffer() {
     cuda_check(cudaFree(m_device_ptr));
-}
-
-template <typename T>
-CudaBuffer<T>& CudaBuffer<T>::operator=(CudaBuffer const& other) {
-    cuda_check(cudaFree(m_device_ptr));
-
-    cuda_check(cudaMalloc(m_device_ptr, other.m_size));
-    m_size = other.m_size;
-
-    cuda_check(cudaMemcpy(&m_device_ptr, other.m_device_ptr, m_size, cudaMemcpyDeviceToDevice));
-
-    return *this;
 }
 
 template <typename T>
