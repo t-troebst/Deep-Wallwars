@@ -14,6 +14,7 @@ from data import get_datasets
 
 device = torch.device("cuda:0")
 input_channels = 7
+bootstrap_epochs = 10
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -30,6 +31,12 @@ parser.add_argument(
     type=int,
 )
 parser.add_argument(
+    "--initial_generation",
+    help="Initial generation to start from (to continue previous run)",
+    default=0,
+    type=int,
+)
+parser.add_argument(
     "--training-batch-size",
     help="Batch size used during training",
     default=512,
@@ -38,7 +45,7 @@ parser.add_argument(
 parser.add_argument(
     "--inference-batch-size",
     help="Batch size used during inference (self-play)",
-    default=128,
+    default=256,
     type=int,
 )
 parser.add_argument(
@@ -81,7 +88,7 @@ parser.add_argument(
 parser.add_argument(
     "--epochs",
     help="Number of epochs to train per training loop",
-    default=2,
+    default=1,
     type=int,
 )
 parser.add_argument(
@@ -132,6 +139,10 @@ def save_model(model, name):
         )
 
 
+def load_model(name):
+    return torch.load(f"{args.models}/{name}.pt").to(device)
+
+
 def run_self_play(model1, model2, generation):
     print(f"Running self play (generation {generation})...")
     with open(args.log, "a") as f:
@@ -161,7 +172,7 @@ def run_self_play(model1, model2, generation):
 
 
 def predict_valuation(xs):
-    return torch.where(xs[1] >= 0.1, 1.0, 0.0) + torch.where(xs[1] <= 0.1, -1.0, 0.0)
+    return torch.where(xs[1] >= 0.05, 1.0, 0.0) + torch.where(xs[1] <= 0.05, -1.0, 0.0)
 
 
 def valuation_accuracy(xs, ys):
@@ -186,7 +197,7 @@ def loss(out, label):
     return kl_div(priors_out, priors_label) + mse(values_out, values_label)
 
 
-def train_model(model, generation):
+def train_model(model, generation, epochs):
     print(f"Loading training data (generation {generation})...")
     training_data, valid_data = get_datasets(
         get_training_paths(generation), args.training_games, args.columns, args.rows
@@ -213,18 +224,25 @@ def train_model(model, generation):
     )
     learning_rate = learner.lr_find(show_plot=False)[0]
     print(f"Training generation {generation} with learning rate {learning_rate}...")
-    learner.fit(args.epochs, learning_rate)
+    learner.fit(epochs, learning_rate)
 
 
 # Bootstrap generation 0 data
-run_self_play("simple", "simple", 0)
-model = ResNet(args.columns, args.rows, args.hidden_channels, args.layers)
-train_model(model, 1)
-save_model(model, "model_1")
-gc.collect()
+if args.initial_generation == 0:
+    run_self_play("simple", "simple", 0)
+    model = ResNet(args.columns, args.rows, args.hidden_channels, args.layers)
+    start_generation = 2
+    train_model(model, 1, bootstrap_epochs)
+    save_model(model, "model_1")
+    gc.collect()
+else:
+    model = load_model(f"model_{args.initial_generation}")
+    save_model(model, f"model_{args.initial_generation}")
+    start_generation = args.initial_generation + 1
 
-for generation in range(2, args.generations + 1):
+
+for generation in range(start_generation, start_generation + args.generations - 1):
     run_self_play(f"{args.models}/model_{generation - 1}.trt", "", generation - 1)
-    train_model(model, generation)
+    train_model(model, generation, args.epochs)
     save_model(model, f"model_{generation}")
     gc.collect()
