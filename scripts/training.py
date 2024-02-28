@@ -118,6 +118,7 @@ def save_model(model, name):
     dummy_input = torch.randn(
         args.inference_batch_size, input_channels, args.columns, args.rows
     ).to(device)
+    model.log_output = False
     print("Exporting onnx...")
     torch.onnx.export(
         model,
@@ -137,6 +138,7 @@ def save_model(model, name):
             stdout=f,
             stderr=f,
         )
+    model.log_output = True
 
 
 def load_model(name):

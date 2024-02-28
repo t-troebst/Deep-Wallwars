@@ -3,7 +3,6 @@
 #include <NvInfer.h>
 #include <NvInferRuntime.h>
 
-#include <cmath>
 #include <iostream>
 #include <vector>
 
@@ -50,11 +49,6 @@ void TensorRTModel::inference(std::span<float> states, Output const& out) {
     m_priors.to_host(out.priors, m_stream);
     m_values.to_host(out.values, m_stream);
     m_stream.synchronize();
-
-    // Models are expected to output priors as log probabilities
-    for (float& f : out.priors) {
-        f = std::exp(f);
-    }
 }
 
 std::unique_ptr<nv::ICudaEngine> load_serialized_engine(nv::IRuntime& runtime,
