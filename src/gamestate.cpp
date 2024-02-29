@@ -628,59 +628,13 @@ Wall Board::flip_horizontal(Wall wall) const {
     return Wall{flip_horizontal(wall.cell), ::flip_horizontal(wall.direction())};
 }
 
-std::uint64_t Board::hash_from_pov(Player player) const {
-    auto const flip = [&](auto x) { return player == Player::Blue ? flip_horizontal(x) : x; };
+std::uint64_t std::hash<Board>::operator()(Board const& board) const {
+    std::uint64_t position_hash =
+        folly::hash::hash_combine(board.position(Player::Red), board.position(Player::Blue),
+                                  board.goal(Player::Red), board.goal(Player::Blue));
 
-    Player const opponent = other_player(player);
-    std::uint64_t result = folly::hash::hash_combine(
-        flip(position(player)), flip(goal(player)), flip(position(opponent)), flip(goal(opponent)));
-
-    for (std::size_t i = 0; i < m_board.size(); ++i) {
-        if (m_board[i].has_red_right_wall || m_board[i].has_blue_right_wall) {
-            Wall wall{cell_at_index(i), Direction::Right};
-            result ^= std::hash<Wall>{}(flip(wall));
-        }
-
-        if (m_board[i].has_red_down_wall || m_board[i].has_blue_down_wall) {
-            Wall wall{cell_at_index(i), Direction::Down};
-            result ^= std::hash<Wall>{}(flip(wall));
-        }
-    }
-
-    return result;
-}
-
-bool Board::equal_from_pov(Board const& other, bool swap_pov) const {
-    auto const flip = [&](auto x) { return swap_pov ? flip_horizontal(x) : x; };
-
-    auto other_player_1 = swap_pov ? Player::Blue : Player::Red;
-
-    if (position(Player::Red) != flip(other.position(other_player_1))) {
-        return false;
-    }
-    if (position(Player::Blue) != flip(other.position(other_player(other_player_1)))) {
-        return false;
-    }
-    if (goal(Player::Red) != flip(other.goal(other_player_1))) {
-        return false;
-    }
-    if (goal(Player::Blue) != flip(other.goal(other_player(other_player_1)))) {
-        return false;
-    }
-
-    for (std::size_t i = 0; i < m_board.size(); ++i) {
-        Wall this_right_wall = Wall{cell_at_index(i), Direction::Right};
-        Wall other_right_wall = flip(Wall{cell_at_index(i), Direction::Right});
-        if (is_blocked(this_right_wall) != other.is_blocked(other_right_wall)) {
-            return false;
-        }
-
-        Wall this_down_wall = Wall{cell_at_index(i), Direction::Right};
-        Wall other_down_wall = flip(Wall{cell_at_index(i), Direction::Right});
-        if (is_blocked(this_down_wall) != other.is_blocked(other_down_wall)) {
-            return false;
-        }
-    }
-
-    return true;
+    return folly::hash::hash_range(
+        board.m_board.begin(), board.m_board.end(), position_hash, [](Board::State state) {
+            return static_cast<std::uint64_t>(std::bit_cast<std::uint8_t>(state));
+        });
 }

@@ -15,14 +15,8 @@ std::size_t folly::HeterogeneousAccessHash<CacheEntry>::operator()(
 }
 
 std::size_t folly::HeterogeneousAccessHash<CacheEntry>::operator()(CacheEntryView ce_view) const {
-    auto board_hash = ce_view.board.hash_from_pov(ce_view.turn.player);
-
-    auto previous_pos = ce_view.previous_position;
-    if (previous_pos && ce_view.turn.player == Player::Blue) {
-        previous_pos = ce_view.board.flip_horizontal(*previous_pos);
-    }
-
-    return folly::hash::hash_combine(board_hash, ce_view.turn.action, previous_pos);
+    return folly::hash::hash_combine(ce_view.board, ce_view.turn.action, ce_view.turn.player,
+                                     ce_view.previous_position);
 }
 
 bool folly::HeterogeneousAccessEqualTo<CacheEntry>::operator()(CacheEntry const& lhs,
@@ -36,16 +30,15 @@ bool folly::HeterogeneousAccessEqualTo<CacheEntry>::operator()(CacheEntryView lh
         return false;
     }
 
-    auto previous_pos = lhs.previous_position;
-    if (previous_pos && lhs.turn.player != rhs.turn.player) {
-        previous_pos = lhs.board.flip_horizontal(*previous_pos);
-    }
-
-    if (previous_pos != rhs.previous_position) {
+    if (lhs.turn.player != rhs.turn.player) {
         return false;
     }
 
-    return lhs.board.equal_from_pov(rhs.board, lhs.turn.player != rhs.turn.player);
+    if (lhs.previous_position != rhs.previous_position) {
+        return false;
+    }
+
+    return lhs.board == rhs.board;
 }
 
 bool folly::HeterogeneousAccessEqualTo<CacheEntry>::operator()(CacheEntry const& lhs,
@@ -82,21 +75,13 @@ folly::coro::Task<Evaluation> CachedPolicy::operator()(Board const& board, Turn 
 
     // TODO: its a bit annoying that we always compute the hash twice
     auto hash = folly::HeterogeneousAccessHash<CacheEntry>{}(ce_view);
-
     auto& lru = m_cache->lrus[hash % m_cache->lrus.size()];
 
     {
         auto locked_lru = lru.wlock();
         auto existing_entry = locked_lru->find(CacheEntryView{board, turn, previous_position});
-
         if (existing_entry != locked_lru->end()) {
             ++m_cache->cache_hits;
-
-            Evaluation eval = existing_entry->second;
-            if (existing_entry->first.turn.player != turn.player) {
-                flip_evaluation(board, eval);
-            }
-
             co_return existing_entry->second;
         }
     }

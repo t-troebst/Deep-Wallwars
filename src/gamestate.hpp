@@ -58,6 +58,7 @@ template <>
 struct hash<Wall> {
     std::uint64_t operator()(Wall wall) const;
 };
+
 }  // namespace std
 
 using Action = std::variant<Direction, Wall>;
@@ -97,6 +98,8 @@ public:
     Board(int columns, int rows, Cell red_start, Cell red_goal);
     Board(int columns, int rows, Cell red_start, Cell red_goal, Cell blue_start, Cell blue_goal);
 
+    bool operator==(Board const& other) const = default;
+
     bool is_blocked(Wall wall) const;
 
     std::vector<Direction> legal_directions(Player player) const;
@@ -127,14 +130,6 @@ public:
     Cell cell_at_index(int i) const;
     int index_from_cell(Cell cell) const;
 
-    // Hash the board state while flipping pov for the blue player. Note: currently we do not hash
-    // the *color* of the walls.
-    std::uint64_t hash_from_pov(Player player) const;
-
-    // Check whether this board state is equal to `other`, after potentially swapping the players
-    // and the horizontal axis. Also ignores wall color.
-    bool equal_from_pov(Board const& other, bool swap_pov) const;
-
     [[nodiscard]] Cell flip_horizontal(Cell cell) const;
     [[nodiscard]] Wall flip_horizontal(Wall all) const;
 
@@ -148,12 +143,18 @@ private:
         bool has_blue_down_wall : 1 = false;
         bool has_red_goal : 1 = false;
         bool has_blue_goal : 1 = false;
+
+        bool operator==(State const& other) const = default;
     };
 
-    struct {
+    struct PlayerState {
         Cell position;
         Cell goal;
+
+        bool operator==(PlayerState const& other) const = default;
     } m_red, m_blue;
+
+    friend std::hash<Board>;
 
     int m_columns;
     int m_rows;
@@ -166,3 +167,10 @@ private:
     std::pair<bool, int> find_bridges(Cell start, Cell target, int level, std::vector<int>& levels,
                                       std::set<Wall>& bridges) const;
 };
+
+namespace std {
+template <>
+struct hash<Board> {
+    std::uint64_t operator()(Board const& board) const;
+};
+}  // namespace std
