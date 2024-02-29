@@ -276,7 +276,9 @@ void MCTS::add_root_noise() {
 }
 
 folly::coro::Task<TreeNode*> MCTS::create_tree_node(Board board, Turn turn, TreeNode* parent) {
-    Evaluation eval = co_await m_evaluate(board, turn);
+    std::optional<Cell> previous_position =
+        parent ? std::optional<Cell>{parent->board.position(turn.player)} : std::nullopt;
+    Evaluation eval = co_await m_evaluate(board, turn, previous_position);
     TreeNode* result = new TreeNode{parent,
                                     std::move(board),
                                     turn,

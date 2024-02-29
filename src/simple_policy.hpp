@@ -6,7 +6,8 @@ class SimplePolicy {
 public:
     SimplePolicy(float move_prior, float good_move_bias, float bad_move_bias);
 
-    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn);
+    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn,
+                                             std::optional<Cell> previous_position);
 
 private:
     float m_move_prior;

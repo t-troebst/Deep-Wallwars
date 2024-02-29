@@ -59,8 +59,10 @@ struct Evaluation {
 };
 
 // Coroutine that takes the current board and player turn and "evaluates" it, either by some
-// heuristic or ML model.
-using EvaluationFunction = std::function<folly::coro::Task<Evaluation>(Board const&, Turn)>;
+// heuristic or ML model. The last argument is the previous position of the current player, which is
+// needed because we may not return to that position in the same move.
+using EvaluationFunction =
+    std::function<folly::coro::Task<Evaluation>(Board const&, Turn, std::optional<Cell>)>;
 
 class MCTS {
 public:

@@ -13,7 +13,8 @@ public:
     CachedPolicy(EvaluationFunction evaluate, std::size_t capacity,
                  std::size_t shards = std::thread::hardware_concurrency());
 
-    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn);
+    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn,
+                                             std::optional<Cell> previous_position);
 
     int cache_hits() const;
     int cache_misses() const;

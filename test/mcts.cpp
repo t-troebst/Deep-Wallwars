@@ -16,7 +16,7 @@
 struct DownPolicy {
     std::shared_ptr<int> samples = std::make_shared<int>(0);
 
-    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn) {
+    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn, std::optional<Cell>) {
         ++*samples;
         if (board.is_blocked(Wall{board.position(turn.player), Direction::Down})) {
             co_return Evaluation{0, {}};
@@ -88,7 +88,7 @@ TEST_CASE("Sample many", "[MCTS]") {
 struct SlowDownPolicy {
     std::shared_ptr<std::atomic<int>> samples = std::make_shared<std::atomic<int>>(0);
 
-    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn) {
+    folly::coro::Task<Evaluation> operator()(Board const& board, Turn turn, std::optional<Cell>) {
         ++*samples;
         co_await folly::coro::sleep(std::chrono::milliseconds{250});
         Evaluation result;

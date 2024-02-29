@@ -3,7 +3,8 @@
 BatchedModelPolicy::BatchedModelPolicy(std::shared_ptr<BatchedModel> model)
     : m_model{std::move(model)} {}
 
-folly::coro::Task<Evaluation> BatchedModelPolicy::operator()(Board const& board, Turn turn) {
+folly::coro::Task<Evaluation> BatchedModelPolicy::operator()(
+    Board const& board, Turn turn, std::optional<Cell> previous_position) {
     auto state = convert_to_model_input(board, turn);
     auto inference_result = co_await m_model->inference(std::move(state));
 
@@ -15,7 +16,9 @@ folly::coro::Task<Evaluation> BatchedModelPolicy::operator()(Board const& board,
 
     for (Direction dir : kDirections) {
         if (!board.is_blocked(Wall{pos, dir})) {
-            eval.edges.emplace_back(dir, inference_result.prior[2 * board_size + int(dir)]);
+            if (!previous_position || pos.step(dir) != *previous_position) {
+                eval.edges.emplace_back(dir, inference_result.prior[2 * board_size + int(dir)]);
+            }
         }
     }
 

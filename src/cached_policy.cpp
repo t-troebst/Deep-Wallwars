@@ -34,7 +34,8 @@ void flip_evaluation(Board const& board, Evaluation& eval) {
     }
 }
 
-folly::coro::Task<Evaluation> CachedPolicy::operator()(Board const& board, Turn turn) {
+folly::coro::Task<Evaluation> CachedPolicy::operator()(Board const& board, Turn turn,
+                                                       std::optional<Cell> previous_position) {
     auto const hash = position_hash(board, turn, false);
     auto& lru = m_cache->shards[hash % m_cache->shards.size()];
 
@@ -59,7 +60,7 @@ folly::coro::Task<Evaluation> CachedPolicy::operator()(Board const& board, Turn 
     }
 
     ++m_cache->cache_misses;
-    Evaluation eval = co_await m_cache->evaluate(board, turn);
+    Evaluation eval = co_await m_cache->evaluate(board, turn, previous_position);
     lru.wlock()->insert(hash, eval);
     co_return eval;
 }
