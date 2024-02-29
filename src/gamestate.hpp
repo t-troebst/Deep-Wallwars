@@ -20,6 +20,8 @@ constexpr std::array<Direction, 4> kDirections = {Direction::Right, Direction::D
 
 enum class Player { Red, Blue };
 
+enum class Winner { Red, Blue, Draw, Undecided };
+
 Player other_player(Player player);
 
 struct Cell {
@@ -106,7 +108,7 @@ public:
 
     void do_action(Player player, Action action);
 
-    std::optional<Player> winner() const;
+    Winner winner() const;
     double score_for(Player player) const;
 
     Cell position(Player player) const;

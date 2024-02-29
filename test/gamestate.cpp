@@ -1,12 +1,8 @@
 #include "gamestate.hpp"
 
-#include <algorithm>
 #include <catch2/catch_get_random_seed.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <iostream>
 #include <random>
-#include <ranges>
-#include <sstream>
 
 TEST_CASE("Legal walls", "[Game State]") {
     Board tiny{2, 2};
@@ -33,7 +29,7 @@ TEST_CASE("Empty board", "[Game State]") {
     REQUIRE(board.legal_actions(Player::Red).size() == 14);
     REQUIRE(board.legal_actions(Player::Blue).size() == 14);
 
-    REQUIRE_FALSE(board.winner());
+    REQUIRE(board.winner() == Winner::Undecided);
 }
 
 TEST_CASE("Big board", "[Game State]") {
@@ -70,15 +66,14 @@ TEST_CASE("Advance to win", "[Game State]") {
     Board board{3, 3, {0, 0}, {2, 2}, {2, 0}, {0, 2}};
 
     board.take_step(Player::Red, Direction::Right);
-    REQUIRE_FALSE(board.winner());
+    REQUIRE(board.winner() == Winner::Undecided);
     board.take_step(Player::Red, Direction::Down);
-    REQUIRE_FALSE(board.winner());
+    REQUIRE(board.winner() == Winner::Undecided);
     board.take_step(Player::Red, Direction::Down);
-    REQUIRE_FALSE(board.winner());
+    REQUIRE(board.winner() == Winner::Undecided);
     board.take_step(Player::Red, Direction::Right);
     REQUIRE(board.position(Player::Red) == board.goal(Player::Red));
-    REQUIRE(board.winner());
-    REQUIRE(board.winner().value() == Player::Red);
+    REQUIRE(board.winner() == Winner::Red);
 }
 
 TEST_CASE("Block walls", "[Game State]") {

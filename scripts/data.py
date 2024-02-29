@@ -2,7 +2,7 @@ from fastai.data.all import RandomSplitter, get_files
 from torch import tensor
 from random import sample
 
-input_channels = 7
+input_channels = 8
 
 
 def tensor_from_csv_line(line):

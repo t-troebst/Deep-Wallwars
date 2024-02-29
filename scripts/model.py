@@ -1,13 +1,17 @@
 import torch.nn as nn
 import torch.nn.functional as fn
 
+input_channels = 8
+
 
 class ResNet(nn.Module):
     def __init__(self, columns, rows, hidden_channels, layers):
         super().__init__()
 
         self.start = nn.Sequential(
-            nn.Conv2d(7, hidden_channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(
+                input_channels, hidden_channels, kernel_size=3, padding=1, bias=False
+            ),
             nn.BatchNorm2d(hidden_channels),
             nn.ReLU(),
         )

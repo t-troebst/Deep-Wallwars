@@ -13,7 +13,7 @@ from model import ResNet
 from data import get_datasets
 
 device = torch.device("cuda:0")
-input_channels = 7
+input_channels = 8
 bootstrap_epochs = 10
 
 parser = argparse.ArgumentParser()

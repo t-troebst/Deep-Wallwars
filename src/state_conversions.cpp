@@ -41,7 +41,7 @@ ModelOutput convert_to_model_output(NodeInfo const& node_info, float score_for_r
 
 std::vector<float> convert_to_model_input(Board const& board, Turn turn) {
     std::size_t board_size = board.columns() * board.rows();
-    std::vector<float> state(7 * board_size);
+    std::vector<float> state(8 * board_size);
 
     auto blocked_directions = board.blocked_directions();
     board.fill_relative_distances(board.position(turn.player), {state.begin(), board_size},
@@ -65,7 +65,12 @@ std::vector<float> convert_to_model_input(Board const& board, Turn turn) {
     }
 
     if (turn.action == Turn::Second) {
-        std::fill(state.begin() + 6 * board_size, state.end(), 1.0);
+        std::fill(state.begin() + 6 * board_size, state.begin() + 7 * board_size, 1.0);
+    }
+
+    // Model needs to know if it is red because of draws
+    if (turn.player == Player::Red) {
+        std::fill(state.begin() + 7 * board_size, state.end(), 1.0);
     }
 
     return state;

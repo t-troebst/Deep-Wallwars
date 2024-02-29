@@ -13,7 +13,7 @@
 namespace views = std::ranges::views;
 
 struct GameResult {
-    std::optional<Player> winner;
+    Winner winner;
     int wasted_inferences;
 };
 
@@ -30,17 +30,18 @@ folly::coro::Task<> human_play(Board board, EvaluationFunction model,
     auto const check_winner = [&] {
         auto winner = mcts.current_board().winner();
 
-        if (!winner) {
-            return false;
+        if (winner == Winner::Red) {
+            XLOG(INFO, "Red won!");
+            return true;
+        } else if (winner == Winner::Blue) {
+            XLOG(INFO, "Blue won!");
+            return true;
+        } else if (winner == Winner::Draw) {
+            XLOG(INFO, "Draw!");
+            return true;
         }
 
-        if (*winner == human) {
-            XLOG(INFO, "Player won!");
-        } else {
-            XLOG(INFO, "AI won!");
-        }
-
-        return true;
+        return false;
     };
 
     while (true) {
@@ -105,11 +106,16 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
             Action action = mcts1.commit_to_action(opts.temperature);
             mcts2.force_action(action);
 
-            if (mcts1.current_board().winner()) {
-                XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
+            if (Winner winner = mcts1.current_board().winner(); winner != Winner::Undecided) {
+                if (winner == Winner::Red) {
+                    XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
+                } else {
+                    XLOGF(INFO, "Red player drew game {} in {} moves.", index, num_moves);
+                }
+
                 opts.on_complete(mcts1, index);
                 opts.on_complete(mcts2, index);
-                co_return {Player::Red, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
+                co_return {winner, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
             }
         }
 
@@ -118,11 +124,11 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
             Action action = mcts2.commit_to_action(opts.temperature);
             mcts1.force_action(action);
 
-            if (mcts2.current_board().winner()) {
+            if (Winner winner = mcts2.current_board().winner(); winner != Winner::Undecided) {
                 XLOGF(INFO, "Blue player won game {} in {} moves.", index, num_moves);
                 opts.on_complete(mcts1, index);
                 opts.on_complete(mcts2, index);
-                co_return {Player::Blue, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
+                co_return {winner, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
             }
         }
     }
@@ -130,7 +136,7 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
     XLOGF(INFO, "Game {} was ended because it hit the move limit of {}", index, opts.move_limit);
     opts.on_complete(mcts1, index);
     opts.on_complete(mcts2, index);
-    co_return {{}, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
+    co_return {Winner::Undecided, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
 }
 
 folly::coro::Task<double> computer_play(Board board, EvaluationFunction evaluate1,
@@ -145,21 +151,26 @@ folly::coro::Task<double> computer_play(Board board, EvaluationFunction evaluate
 
     auto results = co_await folly::coro::collectAllWindowed(game_tasks, opts.max_parallel_games);
     int red_wins = 0;
-    int timeouts = 0;
+    int draws = 0;
+    int blue_wins = 0;
     int wasted_inferences = 0;
 
     for (GameResult result : results) {
-        if (!result.winner) {
-            ++timeouts;
-        } else if (result.winner == Player::Red) {
+        if (result.winner == Winner::Red) {
             ++red_wins;
+        } else if (result.winner == Winner::Draw) {
+            ++draws;
+        } else if (result.winner == Winner::Blue) {
+            ++blue_wins;
         }
 
         wasted_inferences += result.wasted_inferences;
     }
 
-    XLOGF(INFO, "{}/{} games have finished and red won {} of them.", games - timeouts, games,
-          red_wins);
+    int total_games = red_wins + draws + blue_wins;
+
+    XLOGF(INFO, "Red's W/L/D statistic over {}/{} games is: {} / {} / {}", total_games, games,
+          red_wins, blue_wins, draws);
     XLOGF(INFO, "{} inferences were wasted.", wasted_inferences);
 
     co_return double(red_wins) / games;

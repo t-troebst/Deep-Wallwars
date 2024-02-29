@@ -111,8 +111,19 @@ folly::coro::Task<float> MCTS::initialize_child(TreeNode& current, TreeEdge& edg
 }
 
 folly::coro::Task<float> MCTS::sample_rec(TreeNode& current) {
-    if (auto winner = current.board.winner(); winner) {
-        float value = *winner == current.turn.player ? 1 : -1;
+    if (auto winner = current.board.winner(); winner != Winner::Undecided) {
+        float value = [&] {
+            if (winner == Winner::Draw) {
+                return 0.0;
+            }
+
+            if (winner == Winner::Red) {
+                return current.turn.player == Player::Red ? 1.0 : -1.0;
+            }
+
+            return current.turn.player == Player::Blue ? 1.0 : -1.0;
+        }();
+
         current.add_sample(value);
         co_return value;
     }
@@ -206,7 +217,7 @@ Action MCTS::commit_to_action(float temperature) {
 Move MCTS::commit_to_move() {
     Move result{commit_to_action(), {}};
 
-    if (!m_root->board.winner()) {
+    if (m_root->board.winner() == Winner::Undecided) {
         result.second = commit_to_action();
     }
 
@@ -216,7 +227,7 @@ Move MCTS::commit_to_move() {
 Move MCTS::commit_to_move(float temperature) {
     Move result{commit_to_action(temperature), {}};
 
-    if (!m_root->board.winner()) {
+    if (m_root->board.winner() == Winner::Undecided) {
         result.second = commit_to_action(temperature);
     }
 
@@ -244,7 +255,7 @@ void MCTS::force_action(Action const& action) {
 void MCTS::force_move(Move const& move) {
     force_action(move.first);
 
-    if (!m_root->board.winner()) {
+    if (m_root->board.winner() == Winner::Undecided) {
         force_action(move.second);
     }
 }

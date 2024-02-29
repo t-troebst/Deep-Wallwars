@@ -446,31 +446,39 @@ void Board::do_action(Player player, Action action) {
         [&](Wall wall) { place_wall(player, wall); });
 }
 
-std::optional<Player> Board::winner() const {
+Winner Board::winner() const {
     if (m_red.position == m_red.goal) {
-        return Player::Red;
+        if (distance(m_blue.position, m_blue.goal) <= 2) {
+            return Winner::Draw;
+        }
+        return Winner::Red;
     }
 
     if (m_blue.position == m_blue.goal) {
-        return Player::Blue;
+        return Winner::Blue;
     }
 
-    return {};
+    return Winner::Undecided;
 }
 
 double Board::score_for(Player player) const {
-    double dist = distance(position(player), goal(player));
+    Winner current_winner = winner();
 
-    if (dist == 0) {
-        return 1.0;
+    if (current_winner == Winner::Draw) {
+        return 0.0;
     }
 
+    if (current_winner == Winner::Red) {
+        return player == Player::Red ? 1.0 : -1.0;
+    }
+
+    if (current_winner == Winner::Blue) {
+        return player == Player::Blue ? 1.0 : -1.0;
+    }
+
+    double dist = distance(position(player), goal(player));
     Player opponent = other_player(player);
     double opponent_dist = distance(position(opponent), goal(opponent));
-
-    if (opponent_dist == 0) {
-        return -1.0;
-    }
 
     return dist < opponent_dist ? 1.0 - dist / opponent_dist : -1.0 + opponent_dist / dist;
 }
