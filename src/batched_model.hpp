@@ -10,7 +10,7 @@
 
 #include "state_conversions.hpp"
 
-struct Model;
+class Model;
 
 class BatchedModel {
 public:
