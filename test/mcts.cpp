@@ -54,8 +54,8 @@ TEST_CASE("Commit to action", "[MCTS]") {
 
     folly::coro::blockingWait(mcts.sample(1));
 
-    Action action = mcts.commit_to_action();
-    CHECK(std::get<Direction>(action) == Direction::Down);
+    auto action = mcts.commit_to_action();
+    CHECK(std::get<Direction>(*action) == Direction::Down);
     CHECK(mcts.current_board().position(Player::Red) == Cell{0, 1});
 }
 

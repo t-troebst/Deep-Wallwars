@@ -47,19 +47,20 @@ folly::coro::Task<> human_play(Board board, EvaluationFunction model,
     while (true) {
         if (first != 'y' || mcts.history().size() != 0) {
             Cell current_pos = mcts.current_board().position(other_player(human));
+
             co_await mcts.sample(opts.samples);
-            Action action_1 = mcts.commit_to_action();
-            if (check_winner()) {
+            auto action_1 = mcts.commit_to_action();
+            if (!action_1 || check_winner()) {
                 break;
             }
 
             co_await mcts.sample(opts.samples);
-            Action action_2 = mcts.commit_to_action();
-            if (check_winner()) {
+            auto action_2 = mcts.commit_to_action();
+            if (!action_2 || check_winner()) {
                 break;
             }
 
-            Move move{action_1, action_2};
+            Move move{*action_1, *action_2};
             std::cout << move.standard_notation(current_pos) << '\n';
         }
 
@@ -103,8 +104,15 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
     for (int num_moves = 1; opts.move_limit == 0 || num_moves <= opts.move_limit; ++num_moves) {
         for (int i = 0; i < 2; ++i) {
             co_await mcts1.sample(opts.samples);
-            Action action = mcts1.commit_to_action(opts.temperature);
-            mcts2.force_action(action);
+            auto action = mcts1.commit_to_action(opts.temperature);
+            if (!action) {
+                XLOGF(INFO, "Blue player won game {} in {} moves.", index, num_moves);
+                opts.on_complete(mcts1, index);
+                opts.on_complete(mcts2, index);
+                co_return {Winner::Blue, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
+            }
+
+            mcts2.force_action(*action);
 
             if (Winner winner = mcts1.current_board().winner(); winner != Winner::Undecided) {
                 if (winner == Winner::Red) {
@@ -121,8 +129,14 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
 
         for (int i = 0; i < 2; ++i) {
             co_await mcts2.sample(opts.samples);
-            Action action = mcts2.commit_to_action(opts.temperature);
-            mcts1.force_action(action);
+            auto action = mcts2.commit_to_action(opts.temperature);
+            if (!action) {
+                XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
+                opts.on_complete(mcts1, index);
+                opts.on_complete(mcts2, index);
+                co_return {Winner::Blue, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
+            }
+            mcts1.force_action(*action);
 
             if (Winner winner = mcts2.current_board().winner(); winner != Winner::Undecided) {
                 XLOGF(INFO, "Blue player won game {} in {} moves.", index, num_moves);

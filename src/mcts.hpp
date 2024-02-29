@@ -89,11 +89,12 @@ public:
 
     folly::coro::Task<float> sample(int iterations);
 
-    Action commit_to_action();
-    Action commit_to_action(float temperature);
-
-    Move commit_to_move();
-    Move commit_to_move(float temperature);
+    // Selects the best action from the perspective of the current player and commits to it.
+    // In rare cases there may be no valid action at all (either because the EvaluationFunction is
+    // arbitrarily restricting the set of possible actions or because our previous action ran us
+    // into a dead-end).
+    std::optional<Action> commit_to_action();
+    std::optional<Action> commit_to_action(float temperature);
 
     void force_action(Action const& action);
     void force_move(Move const& move);
@@ -117,5 +118,7 @@ private:
     void delete_subtree(TreeNode& node);
     void move_root(TreeEdge const& edge);
 
-    folly::coro::Task<TreeNode*> create_tree_node(Board board, Turn turn, TreeNode* parent);
+    folly::coro::Task<TreeNode*> create_tree_node(Board board, Turn turn,
+                                                  std::optional<Cell> previous_position,
+                                                  TreeNode* parent);
 };

@@ -2,6 +2,7 @@
 
 #include <folly/experimental/coro/BlockingWait.h>
 #include <folly/experimental/coro/Collect.h>
+#include <folly/logging/xlog.h>
 
 #include <algorithm>
 #include <random>
@@ -42,7 +43,8 @@ MCTS::MCTS(EvaluationFunction evaluate, Board board)
 
 MCTS::MCTS(EvaluationFunction evaluate, Board board, Options options)
     : m_evaluate{std::move(evaluate)},
-      m_root{folly::coro::blockingWait(create_tree_node(board, options.starting_turn, nullptr))},
+      m_root{
+          folly::coro::blockingWait(create_tree_node(board, options.starting_turn, {}, nullptr))},
       m_opts{options},
       m_gamma_dist{options.direchlet_alpha, 1.0},
       m_twister{options.seed} {
@@ -95,9 +97,12 @@ TreeEdge& MCTS::get_best_edge(TreeNode& current) const {
 folly::coro::Task<float> MCTS::initialize_child(TreeNode& current, TreeEdge& edge) {
     Board next_board{current.board};
     next_board.do_action(current.turn.player, edge.action);
+    auto previous_position = current.turn.action == Turn::First
+                                 ? std::optional<Cell>{current.board.position(current.turn.player)}
+                                 : std::nullopt;
 
-    TreeNode* new_node =
-        co_await create_tree_node(std::move(next_board), current.turn.next(), &current);
+    TreeNode* new_node = co_await create_tree_node(std::move(next_board), current.turn.next(),
+                                                   previous_position, &current);
 
     float value = new_node->value.load().total_weight;
     TreeNode* child = nullptr;
@@ -134,8 +139,10 @@ folly::coro::Task<float> MCTS::sample_rec(TreeNode& current) {
         co_return value;
     }
 
+    // This can happen if our first action in the turn is a move and our only possible second action
+    // is to undo that move.
     if (current.edges.empty()) {
-        float value = -1;
+        float value = -2;
         current.add_sample(value);
         co_return value;
     }
@@ -170,9 +177,10 @@ void MCTS::move_root(TreeEdge const& edge) {
     add_root_noise();
 }
 
-Action MCTS::commit_to_action() {
+std::optional<Action> MCTS::commit_to_action() {
     if (m_root->edges.empty()) {
-        throw std::runtime_error("No action available!");
+        XLOG(WARN, "No action available!");
+        return {};
     }
 
     TreeEdge const& te = *std::ranges::max_element(m_root->edges, {}, [&](TreeEdge const& te) {
@@ -180,7 +188,8 @@ Action MCTS::commit_to_action() {
     });
 
     if (!te.child) {
-        throw std::runtime_error("No explored action available!");
+        XLOG(WARN, "No explored action available!");
+        return {};
     }
 
     Action result = te.action;
@@ -188,13 +197,14 @@ Action MCTS::commit_to_action() {
     return result;
 }
 
-Action MCTS::commit_to_action(float temperature) {
+std::optional<Action> MCTS::commit_to_action(float temperature) {
     if (temperature == 0.0) {
         return commit_to_action();
     }
 
     if (m_root->edges.empty()) {
-        throw std::runtime_error("No action available!");
+        XLOG(WARN, "No action available!");
+        return {};
     }
 
     auto const weights = std::ranges::views::transform(m_root->edges, [&](TreeEdge const& te) {
@@ -206,31 +216,12 @@ Action MCTS::commit_to_action(float temperature) {
     TreeEdge const& te = m_root->edges[weight_dist(m_twister)];
 
     if (!te.child) {
-        throw std::runtime_error("No explored action available!");
+        XLOG(WARN, "No explored action available!");
+        return {};
     }
 
     Action result = te.action;
     move_root(te);  // invalidates reference to te!
-    return result;
-}
-
-Move MCTS::commit_to_move() {
-    Move result{commit_to_action(), {}};
-
-    if (m_root->board.winner() == Winner::Undecided) {
-        result.second = commit_to_action();
-    }
-
-    return result;
-}
-
-Move MCTS::commit_to_move(float temperature) {
-    Move result{commit_to_action(temperature), {}};
-
-    if (m_root->board.winner() == Winner::Undecided) {
-        result.second = commit_to_action(temperature);
-    }
-
     return result;
 }
 
@@ -244,9 +235,12 @@ void MCTS::force_action(Action const& action) {
 
     if (!te_it->child) {
         Board board = m_root->board;
+        auto current_position = m_root->turn.action == Turn::First
+                                    ? std::optional<Cell>{board.position(m_root->turn.player)}
+                                    : std::nullopt;
         board.do_action(m_root->turn.player, action);
         te_it->child = folly::coro::blockingWait(
-            create_tree_node(std::move(board), m_root->turn.next(), m_root));
+            create_tree_node(std::move(board), m_root->turn.next(), current_position, m_root));
     }
 
     move_root(*te_it);
@@ -275,9 +269,9 @@ void MCTS::add_root_noise() {
     }
 }
 
-folly::coro::Task<TreeNode*> MCTS::create_tree_node(Board board, Turn turn, TreeNode* parent) {
-    std::optional<Cell> previous_position =
-        parent ? std::optional<Cell>{parent->board.position(turn.player)} : std::nullopt;
+folly::coro::Task<TreeNode*> MCTS::create_tree_node(Board board, Turn turn,
+                                                    std::optional<Cell> previous_position,
+                                                    TreeNode* parent) {
     Evaluation eval = co_await m_evaluate(board, turn, previous_position);
     TreeNode* result = new TreeNode{parent,
                                     std::move(board),
