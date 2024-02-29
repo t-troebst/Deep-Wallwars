@@ -634,7 +634,6 @@ std::uint64_t std::hash<Board>::operator()(Board const& board) const {
                                   board.goal(Player::Red), board.goal(Player::Blue));
 
     return folly::hash::hash_range(
-        board.m_board.begin(), board.m_board.end(), position_hash, [](Board::State state) {
-            return static_cast<std::uint64_t>(std::bit_cast<std::uint8_t>(state));
-        });
+        board.m_board.begin(), board.m_board.end(), position_hash,
+        [](Board::State state) { return std::bit_cast<std::uint8_t>(state); });
 }
