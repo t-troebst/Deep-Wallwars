@@ -49,8 +49,8 @@ TEST_CASE("Commit to action", "[MCTS]") {
     Board board{4, 4};
     MCTS mcts{DownPolicy{}, std::move(board)};
 
-    CHECK_THROWS(mcts.commit_to_action());
-    CHECK_THROWS(mcts.commit_to_action(0.2));
+    CHECK_FALSE(mcts.commit_to_action());
+    CHECK_FALSE(mcts.commit_to_action(0.2));
 
     folly::coro::blockingWait(mcts.sample(1));
 
