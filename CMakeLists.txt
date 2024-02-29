@@ -26,7 +26,7 @@ add_library(core OBJECT
     src/state_conversions.cpp
     src/tensorrt_model.cpp
 )
-target_link_libraries(core PUBLIC Folly::folly CUDA::cudart nvinfer nvonnxparser)
+target_link_libraries(core PUBLIC Folly::folly CUDA::cudart nvinfer nvonnxparser atomic)
 
 add_executable(deep_ww
     src/main.cpp

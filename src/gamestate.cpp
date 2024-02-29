@@ -417,11 +417,15 @@ void Board::take_step(Player player, Direction dir) {
 
     State& state = state_at(position);
 
-    (player == Player::Red ? state.has_red_player : state.has_blue_player) = false;
-    position = position.step(dir);
-
-    State& new_state = state_at(position);
-    (player == Player::Red ? new_state.has_red_player : new_state.has_blue_player) = true;
+    if (player == Player::Red) {
+        state.has_red_player = false;
+        position = position.step(dir);
+        state_at(position).has_red_player = true;
+    } else {
+        state.has_blue_player = false;
+        position = position.step(dir);
+        state_at(position).has_blue_player = true;
+    }
 }
 
 void Board::place_wall(Player player, Wall wall) {
@@ -434,9 +438,17 @@ void Board::place_wall(Player player, Wall wall) {
     // TODO: should at least add a debug check for disconnecting players from their goals?
 
     if (player == Player::Red) {
-        (wall.type == Wall::Right ? state.has_red_right_wall : state.has_red_down_wall) = true;
+        if (wall.type == Wall::Right) {
+            state.has_red_right_wall = true;
+        } else {
+            state.has_red_down_wall = true;
+        }
     } else {
-        (wall.type == Wall::Right ? state.has_blue_right_wall : state.has_blue_down_wall) = true;
+        if (wall.type == Wall::Right) {
+            state.has_blue_right_wall = true;
+        } else {
+            state.has_blue_down_wall = true;
+        }
     }
 }
 
