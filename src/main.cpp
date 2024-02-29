@@ -66,6 +66,7 @@ void train(nv::IRuntime& runtime, std::string const& model) {
     std::vector<std::unique_ptr<Model>> tensor_rt_models;
     tensor_rt_models.push_back(std::make_unique<TensorRTModel>(*engine));
     tensor_rt_models.push_back(std::make_unique<TensorRTModel>(*engine));
+    tensor_rt_models.push_back(std::make_unique<TensorRTModel>(*engine));
 
     auto batched_model = std::make_shared<BatchedModel>(std::move(tensor_rt_models), 4096);
     TrainingDataPrinter training_data_printer(FLAGS_output, 0.5);
