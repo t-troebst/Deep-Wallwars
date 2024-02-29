@@ -127,8 +127,14 @@ public:
     Cell cell_at_index(int i) const;
     int index_from_cell(Cell cell) const;
 
-    std::uint64_t hash_from_pov(Player player, bool flip_horizontal = false,
-                                bool hash_wall_color = false) const;
+    // Hash the board state while flipping pov for the blue player. Note: currently we do not hash
+    // the *color* of the walls.
+    std::uint64_t hash_from_pov(Player player) const;
+
+    // Check whether this board state is equal to `other`, after potentially swapping the players
+    // and the horizontal axis. Also ignores wall color.
+    bool equal_from_pov(Board const& other, bool swap_pov) const;
+
     [[nodiscard]] Cell flip_horizontal(Cell cell) const;
     [[nodiscard]] Wall flip_horizontal(Wall all) const;
 

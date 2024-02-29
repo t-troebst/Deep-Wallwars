@@ -628,12 +628,8 @@ Wall Board::flip_horizontal(Wall wall) const {
     return Wall{flip_horizontal(wall.cell), ::flip_horizontal(wall.direction())};
 }
 
-std::uint64_t Board::hash_from_pov(Player player, bool flip_hori,
-                                   [[maybe_unused]] bool hash_wall_color) const {
-    // TODO: not used yet and so not supported :P
-    assert(!hash_wall_color);
-
-    auto const flip = [&](auto x) { return flip_hori ? flip_horizontal(x) : x; };
+std::uint64_t Board::hash_from_pov(Player player) const {
+    auto const flip = [&](auto x) { return player == Player::Blue ? flip_horizontal(x) : x; };
 
     Player const opponent = other_player(player);
     std::uint64_t result = folly::hash::hash_combine(
@@ -652,4 +648,39 @@ std::uint64_t Board::hash_from_pov(Player player, bool flip_hori,
     }
 
     return result;
+}
+
+bool Board::equal_from_pov(Board const& other, bool swap_pov) const {
+    auto const flip = [&](auto x) { return swap_pov ? flip_horizontal(x) : x; };
+
+    auto other_player_1 = swap_pov ? Player::Blue : Player::Red;
+
+    if (position(Player::Red) != flip(other.position(other_player_1))) {
+        return false;
+    }
+    if (position(Player::Blue) != flip(other.position(other_player(other_player_1)))) {
+        return false;
+    }
+    if (goal(Player::Red) != flip(other.goal(other_player_1))) {
+        return false;
+    }
+    if (goal(Player::Blue) != flip(other.goal(other_player(other_player_1)))) {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < m_board.size(); ++i) {
+        Wall this_right_wall = Wall{cell_at_index(i), Direction::Right};
+        Wall other_right_wall = flip(Wall{cell_at_index(i), Direction::Right});
+        if (is_blocked(this_right_wall) != other.is_blocked(other_right_wall)) {
+            return false;
+        }
+
+        Wall this_down_wall = Wall{cell_at_index(i), Direction::Right};
+        Wall other_down_wall = flip(Wall{cell_at_index(i), Direction::Right});
+        if (is_blocked(this_down_wall) != other.is_blocked(other_down_wall)) {
+            return false;
+        }
+    }
+
+    return true;
 }

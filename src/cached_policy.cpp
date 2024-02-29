@@ -2,19 +2,61 @@
 
 #include <folly/Hash.h>
 #include <folly/Overload.h>
+#include <folly/container/EvictingCacheMap.h>
+#include <folly/container/HeterogeneousAccess.h>
+#include <folly/detail/ThreadLocalDetail.h>
 
-std::uint64_t position_hash(Board const& board, Turn turn, bool flip_horizontal) {
-    return folly::hash::hash_128_to_64(board.hash_from_pov(turn.player, flip_horizontal),
-                                       turn.action);
+#include <utility>
+
+std::size_t folly::HeterogeneousAccessHash<CacheEntry>::operator()(
+    CacheEntry const& cache_entry) const {
+    return operator()(
+        CacheEntryView{cache_entry.board, cache_entry.turn, cache_entry.previous_position});
 }
 
-CachedPolicy::CachedPolicy(EvaluationFunction evaluate, std::size_t capacity, std::size_t shards)
+std::size_t folly::HeterogeneousAccessHash<CacheEntry>::operator()(CacheEntryView ce_view) const {
+    auto board_hash = ce_view.board.hash_from_pov(ce_view.turn.player);
+
+    auto previous_pos = ce_view.previous_position;
+    if (previous_pos && ce_view.turn.player == Player::Blue) {
+        previous_pos = ce_view.board.flip_horizontal(*previous_pos);
+    }
+
+    return folly::hash::hash_combine(board_hash, ce_view.turn.action, previous_pos);
+}
+
+bool folly::HeterogeneousAccessEqualTo<CacheEntry>::operator()(CacheEntry const& lhs,
+                                                               CacheEntry const& rhs) const {
+    return operator()(CacheEntryView{lhs.board, lhs.turn, lhs.previous_position}, rhs);
+}
+
+bool folly::HeterogeneousAccessEqualTo<CacheEntry>::operator()(CacheEntryView lhs,
+                                                               CacheEntry const& rhs) const {
+    if (lhs.turn != rhs.turn) {
+        return false;
+    }
+
+    auto previous_pos = lhs.previous_position;
+    if (previous_pos && lhs.turn.player != rhs.turn.player) {
+        previous_pos = lhs.board.flip_horizontal(*previous_pos);
+    }
+
+    if (previous_pos != rhs.previous_position) {
+        return false;
+    }
+
+    return lhs.board.equal_from_pov(rhs.board, lhs.turn.player != rhs.turn.player);
+}
+
+bool folly::HeterogeneousAccessEqualTo<CacheEntry>::operator()(CacheEntry const& lhs,
+                                                               CacheEntryView rhs) const {
+    return operator()(rhs, lhs);
+}
+
+CachedPolicy::CachedPolicy(EvaluationFunction evaluate, std::size_t capacity, unsigned shards)
     : m_cache{std::make_shared<EvaluationCache>(std::move(evaluate))} {
-    // Can't figure out how to do this in the constructor initializer list...
-    for (std::size_t i = 0; i < shards; ++i) {
-        m_cache->shards.emplace_back(
-            folly::in_place_t(),
-            folly::EvictingCacheMap<std::uint64_t, Evaluation>(capacity / shards));
+    for (unsigned i = 0; i < shards; ++i) {
+        m_cache->lrus.emplace_back(folly::in_place_t(), capacity / shards);
     }
 }
 
@@ -36,31 +78,31 @@ void flip_evaluation(Board const& board, Evaluation& eval) {
 
 folly::coro::Task<Evaluation> CachedPolicy::operator()(Board const& board, Turn turn,
                                                        std::optional<Cell> previous_position) {
-    auto const hash = position_hash(board, turn, false);
-    auto& lru = m_cache->shards[hash % m_cache->shards.size()];
+    CacheEntryView ce_view{board, turn, previous_position};
+
+    // TODO: its a bit annoying that we always compute the hash twice
+    auto hash = folly::HeterogeneousAccessHash<CacheEntry>{}(ce_view);
+
+    auto& lru = m_cache->lrus[hash % m_cache->lrus.size()];
 
     {
-        auto lock = lru.wlock();
-        if (auto const eval_it = lock->find(hash); eval_it != lock->end()) {
+        auto locked_lru = lru.wlock();
+        auto existing_entry = locked_lru->find(CacheEntryView{board, turn, previous_position});
+
+        if (existing_entry != locked_lru->end()) {
             ++m_cache->cache_hits;
-            co_return eval_it->second;
+
+            Evaluation eval = existing_entry->second;
+            if (existing_entry->first.turn.player != turn.player) {
+                flip_evaluation(board, eval);
+            }
+
+            co_return existing_entry->second;
         }
     }
 
-    auto const flipped_hash = position_hash(board, turn, true);
-    auto& flipped_lru = m_cache->shards[flipped_hash % m_cache->shards.size()];
-    {
-        auto lock = flipped_lru.wlock();
-        if (auto const eval_it = lock->find(flipped_hash); eval_it != lock->end()) {
-            ++m_cache->cache_hits;
-            Evaluation eval = eval_it->second;
-            flip_evaluation(board, eval);
-            co_return eval;
-        }
-    }
-
-    ++m_cache->cache_misses;
     Evaluation eval = co_await m_cache->evaluate(board, turn, previous_position);
-    lru.wlock()->insert(hash, eval);
+    lru.wlock()->insert(CacheEntry{board, turn, previous_position}, eval);
+    ++m_cache->cache_misses;
     co_return eval;
 }

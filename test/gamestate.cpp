@@ -113,7 +113,7 @@ TEST_CASE("Removing random legal walls doesn't disconnect players", "[Game State
     }
 }
 
-TEST_CASE("Flipping commutes with hash", "[Game State]") {
+TEST_CASE("Flipping commutes with hash and equality", "[Game State]") {
     Board board{5, 5};
     board.take_step(Player::Red, Direction::Right);
     board.take_step(Player::Red, Direction::Down);
@@ -126,5 +126,7 @@ TEST_CASE("Flipping commutes with hash", "[Game State]") {
     board.place_wall(Player::Blue, {{4, 0}, Direction::Down});
     board.place_wall(Player::Blue, {{4, 0}, Direction::Left});
 
-    CHECK(board.hash_from_pov(Player::Red) == board.hash_from_pov(Player::Blue, true));
+    CHECK(board.hash_from_pov(Player::Red) == board.hash_from_pov(Player::Blue));
+    CHECK(board.equal_from_pov(board, false));
+    CHECK(board.equal_from_pov(board, true));
 }
