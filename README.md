@@ -12,6 +12,10 @@ In particular, it is supposed to achieve three objectives:
 2. Beat the negamax-based AI that is already on the website on an 8x8 board.
 3. Train a good model in under 24 hours on consumer hardware.
 
+The current status is that a model trained in 3 hours on an RTX 4080 and i7 13700k easily beats both
+myself and the negamax AI with milliseconds of thinking time per move.
+However, there is still lots of interesting work to be done to create the strongest agent!
+
 ## Design
 
 In order to achieve goal 3, the code is written in a way to optimize self-play performance unlike a
