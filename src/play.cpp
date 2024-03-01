@@ -64,6 +64,8 @@ folly::coro::Task<> human_play(Board board, EvaluationFunction model,
             std::cout << move.standard_notation(current_pos) << '\n';
         }
 
+        XLOGF(INFO, "AI values your position as {}.", mcts.root_value());
+
         // TODO: read in standard notation instead of this ad hoc solution
         for (int i = 0; i < 2; ++i) {
             std::string action_type;
