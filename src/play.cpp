@@ -8,6 +8,7 @@
 #include <iostream>
 #include <ranges>
 
+#include "game_recorder.hpp"
 #include "mcts.hpp"
 
 namespace views = std::ranges::views;
@@ -113,9 +114,9 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
 
             if (Winner winner = mcts1.current_board().winner(); winner != Winner::Undecided) {
                 if (winner == Winner::Red) {
-                    XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
+                    XLOGF(INFO, "Red player won game {} in {} moves.", index, 2 * num_moves - 1);
                 } else {
-                    XLOGF(INFO, "Red player drew game {} in {} moves.", index, num_moves);
+                    XLOGF(INFO, "Red player drew game {} in {} moves.", index, 2 * num_moves - 1);
                 }
 
                 opts.on_complete(mcts1, index);
@@ -128,7 +129,7 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
             co_await mcts2.sample(opts.samples);
             auto action = mcts2.commit_to_action(opts.temperature);
             if (!action) {
-                XLOGF(INFO, "Red player won game {} in {} moves.", index, num_moves);
+                XLOGF(INFO, "Red player won game {} in {} moves.", index, 2 * num_moves);
                 opts.on_complete(mcts1, index);
                 opts.on_complete(mcts2, index);
                 co_return {Winner::Blue, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
@@ -136,7 +137,7 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
             mcts1.force_action(*action);
 
             if (Winner winner = mcts2.current_board().winner(); winner != Winner::Undecided) {
-                XLOGF(INFO, "Blue player won game {} in {} moves.", index, num_moves);
+                XLOGF(INFO, "Blue player won game {} in {} moves.", index, 2 * num_moves);
                 opts.on_complete(mcts1, index);
                 opts.on_complete(mcts2, index);
                 co_return {winner, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
