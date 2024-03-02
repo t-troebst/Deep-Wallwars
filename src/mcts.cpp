@@ -225,32 +225,31 @@ std::optional<Action> MCTS::commit_to_action(float temperature) {
     return result;
 }
 
-std::optional<Move> MCTS::commit_to_move() {
-    if (m_root->edges.empty()) {
-        return {};
-    }
+folly::coro::Task<std::optional<Move>> MCTS::sample_and_commit_to_move(int iterations) {
+    co_await sample(iterations);
 
     auto action_1 = commit_to_action();
     if (!action_1) {
-        return {};
+        co_return {};
     }
 
     if (current_board().winner() != Winner::Undecided) {
         auto legal_walls = current_board().legal_walls();
 
         if (legal_walls.empty()) {
-            return {};
+            co_return {};
         }
 
-        return Move{*action_1, legal_walls[0]};
+        co_return Move{*action_1, legal_walls[0]};
     }
 
+    co_await sample(iterations);
     auto action_2 = commit_to_action();
     if (!action_2) {
-        return {};
+        co_return {};
     }
 
-    return Move{*action_1, *action_2};
+    co_return Move{*action_1, *action_2};
 }
 
 void MCTS::force_action(Action const& action) {

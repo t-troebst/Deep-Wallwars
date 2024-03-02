@@ -19,54 +19,42 @@ struct GameResult {
 
 folly::coro::Task<> human_play(Board board, EvaluationFunction model,
                                HumanPlayOptions const& opts) {
-    std::cout << "Go first (y/n): ";
+    std::cout << "Do you want to go first? (y/n): ";
     char first;
     std::cin >> first;
-    auto human = first == 'y' ? Player::Red : Player::Blue;
 
+    bool human_goes_first = first == 'y';
+    auto human_player = human_goes_first ? Player::Red : Player::Blue;
+    auto ai_player = other_player(human_player);
+
+    GameRecorder recorder(board, human_goes_first ? "Player" : "Deep Wallwars",
+                          human_goes_first ? "Deep Wallwars" : "Player");
     MCTS mcts{
         model, std::move(board), {.max_parallelism = opts.max_parallel_samples, .seed = opts.seed}};
 
-    auto const check_winner = [&] {
-        auto winner = mcts.current_board().winner();
-
-        if (winner == Winner::Red) {
-            XLOG(INFO, "Red won!");
-            return true;
-        } else if (winner == Winner::Blue) {
-            XLOG(INFO, "Blue won!");
-            return true;
-        } else if (winner == Winner::Draw) {
-            XLOG(INFO, "Draw!");
-            return true;
-        }
-
-        return false;
-    };
-
+    bool take_turn = !human_goes_first;
     while (true) {
-        if (first != 'y' || mcts.history().size() != 0) {
-            Cell current_pos = mcts.current_board().position(other_player(human));
-
-            co_await mcts.sample(opts.samples);
-            auto action_1 = mcts.commit_to_action();
-            if (!action_1 || check_winner()) {
+        if (take_turn) {
+            Cell ai_cell = mcts.current_board().position(ai_player);
+            auto ai_move = co_await mcts.sample_and_commit_to_move(opts.samples);
+            if (ai_move) {
+                recorder.record_move(ai_player, *ai_move);
+            } else {
+                recorder.record_winner(winner_from_player(human_player));
                 break;
             }
 
-            co_await mcts.sample(opts.samples);
-            auto action_2 = mcts.commit_to_action();
-            if (!action_2 || check_winner()) {
+            std::cout << ai_move->standard_notation(ai_cell) << "\n";
+            if (auto winner = mcts.current_board().winner(); winner != Winner::Undecided) {
+                recorder.record_winner(winner);
                 break;
             }
-
-            Move move{*action_1, *action_2};
-            std::cout << move.standard_notation(current_pos) << '\n';
+        } else {
+            take_turn = true;
         }
-
-        XLOGF(INFO, "AI values your position as {}.", mcts.root_value());
 
         // TODO: read in standard notation instead of this ad hoc solution
+        std::array<Action, 2> actions;
         for (int i = 0; i < 2; ++i) {
             std::string action_type;
             std::cin >> action_type;
@@ -74,18 +62,25 @@ folly::coro::Task<> human_play(Board board, EvaluationFunction model,
             if (action_type == "step") {
                 Direction dir;
                 std::cin >> dir;
-                mcts.force_action(dir);
+                actions[i] = dir;
             } else if (action_type == "wall") {
                 Wall wall;
                 std::cin >> wall;
-                mcts.force_action(wall);
-            }
-
-            if (check_winner()) {
-                break;
+                actions[i] = wall;
             }
         }
+
+        Move human_move{actions[0], actions[1]};
+        mcts.force_move(human_move);
+        recorder.record_move(human_player, human_move);
+
+        if (auto winner = mcts.current_board().winner(); winner != Winner::Undecided) {
+            recorder.record_winner(winner);
+            break;
+        }
     }
+
+    XLOGF(INFO, "Game finished, json string: {}", recorder.to_json());
 }
 
 folly::coro::Task<GameResult> computer_play_single(const Board& board, EvaluationFunction evaluate1,

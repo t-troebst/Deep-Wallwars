@@ -98,7 +98,7 @@ public:
 
     // Selects the move (two actions) from the perspective of the current player and commits to it.
     // If the first action wins the game, the second action will place a wall arbitrarily.
-    std::optional<Move> commit_to_move();
+    folly::coro::Task<std::optional<Move>> sample_and_commit_to_move(int iterations);
 
     void force_action(Action const& action);
     void force_move(Move const& move);

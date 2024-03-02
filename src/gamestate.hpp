@@ -22,6 +22,7 @@ enum class Player { Red, Blue };
 
 enum class Winner { Red, Blue, Draw, Undecided };
 
+Winner winner_from_player(Player player);
 Player other_player(Player player);
 
 struct Cell {

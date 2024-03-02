@@ -35,6 +35,17 @@ Direction flip_horizontal(Direction dir) {
     throw std::runtime_error("Unreachable: invalid direction (flip)!");
 }
 
+Winner winner_from_player(Player player) {
+    switch (player) {
+        case Player::Red:
+            return Winner::Red;
+        case Player::Blue:
+            return Winner::Blue;
+    }
+
+    throw std::runtime_error("Unreachable: invalid player!");
+}
+
 Player other_player(Player player) {
     switch (player) {
         case Player::Red:

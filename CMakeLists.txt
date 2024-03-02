@@ -19,6 +19,7 @@ add_library(core OBJECT
     src/cached_policy.cpp
     src/cuda_wrappers.cpp
     src/gamestate.cpp
+    src/game_recorder.cpp
     src/mcts.cpp
     src/model.cpp
     src/play.cpp
