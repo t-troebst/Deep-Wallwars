@@ -96,6 +96,10 @@ public:
     std::optional<Action> commit_to_action();
     std::optional<Action> commit_to_action(float temperature);
 
+    // Selects the move (two actions) from the perspective of the current player and commits to it.
+    // If the first action wins the game, the second action will place a wall arbitrarily.
+    std::optional<Move> commit_to_move();
+
     void force_action(Action const& action);
     void force_move(Move const& move);
 

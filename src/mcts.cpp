@@ -225,6 +225,34 @@ std::optional<Action> MCTS::commit_to_action(float temperature) {
     return result;
 }
 
+std::optional<Move> MCTS::commit_to_move() {
+    if (m_root->edges.empty()) {
+        return {};
+    }
+
+    auto action_1 = commit_to_action();
+    if (!action_1) {
+        return {};
+    }
+
+    if (current_board().winner() != Winner::Undecided) {
+        auto legal_walls = current_board().legal_walls();
+
+        if (legal_walls.empty()) {
+            return {};
+        }
+
+        return Move{*action_1, legal_walls[0]};
+    }
+
+    auto action_2 = commit_to_action();
+    if (!action_2) {
+        return {};
+    }
+
+    return Move{*action_1, *action_2};
+}
+
 void MCTS::force_action(Action const& action) {
     auto const te_it = std::ranges::find_if(
         m_root->edges, [&](TreeEdge const& te) { return action == te.action; });
