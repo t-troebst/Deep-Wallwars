@@ -13,11 +13,14 @@ folly::coro::Task<Evaluation> BatchedModelPolicy::operator()(
 
     Cell const pos = board.position(turn.player);
     std::size_t board_size = board.columns() * board.rows();
+    float total_prior = 0.0;
 
     for (Direction dir : kDirections) {
         if (!board.is_blocked(Wall{pos, dir})) {
             if (!previous_position || pos.step(dir) != *previous_position) {
-                eval.edges.emplace_back(dir, inference_result.prior[2 * board_size + int(dir)]);
+                float prior = inference_result.prior[2 * board_size + int(dir)];
+                eval.edges.emplace_back(dir, prior);
+                total_prior += prior;
             }
         }
     }
@@ -28,6 +31,12 @@ folly::coro::Task<Evaluation> BatchedModelPolicy::operator()(
         int index =
             int(wall.type) * board.columns() * board.rows() + board.index_from_cell(wall.cell);
         eval.edges.emplace_back(wall, inference_result.prior[index]);
+        total_prior += inference_result.prior[index];
+    }
+
+    // Renormalize to account for illegal actions.
+    for (TreeEdge& edge : eval.edges) {
+        edge.prior /= total_prior;
     }
 
     co_return eval;
