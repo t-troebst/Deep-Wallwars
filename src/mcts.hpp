@@ -67,10 +67,10 @@ using EvaluationFunction =
 class MCTS {
 public:
     struct Options {
-        float puct = 3.0;
+        float puct = 2.0;
         int max_depth = 50;
         int max_parallelism = 4;
-        float direchlet_alpha = 0.2;
+        float direchlet_alpha = 0.3;
         float noise_factor = 0.25;
         float active_sample_penalty = 1.0;
         Turn starting_turn = {Player::Red, Turn::First};
