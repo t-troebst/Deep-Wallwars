@@ -22,10 +22,8 @@ class ResNet(nn.Module):
             nn.Conv2d(hidden_channels, 32, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(32),
             nn.ReLU(),
-        )
-
-        self.priors = nn.Sequential(
-            nn.Flatten(), nn.Linear(32 * columns * rows, 2 * columns * rows + 4)
+            nn.Flatten(),
+            nn.Linear(32 * columns * rows, 2 * columns * rows + 4),
         )
 
         self.log_output = True
