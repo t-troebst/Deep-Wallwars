@@ -51,7 +51,7 @@ parser.add_argument(
 parser.add_argument(
     "--hidden_channels",
     help="Number of channels to use in the hidden layers of the ResNet",
-    default=32,
+    default=128,
     type=int,
 )
 parser.add_argument(
@@ -82,7 +82,7 @@ parser.add_argument(
     "-s",
     "--samples",
     help="Number of samples to use per action during self play",
-    default=5000,
+    default=1000,
     type=int,
 )
 parser.add_argument(
@@ -134,6 +134,7 @@ def save_model(model, name):
                 "trtexec",
                 f"--onnx={args.models}/{name}.onnx",
                 f"--saveEngine={args.models}/{name}.trt",
+                "--fp16"
             ],
             stdout=f,
             stderr=f,
