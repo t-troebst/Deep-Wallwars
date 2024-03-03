@@ -134,7 +134,7 @@ def save_model(model, name):
                 "trtexec",
                 f"--onnx={args.models}/{name}.onnx",
                 f"--saveEngine={args.models}/{name}.trt",
-                "--fp16"
+                "--fp16",
             ],
             stdout=f,
             stderr=f,
@@ -211,14 +211,14 @@ def train_model(model, generation, epochs):
         device=device,
         pin_memory=True,
         shuffle=True,
-        num_workers=4,
+        num_workers=0,  # Otherwise we are at risk of OOM...
     )
     valid_loader = DataLoader(
         valid_data,
         bs=args.training_batch_size,
         device=device,
         pin_memory=True,
-        num_workers=4,
+        num_workers=0,
     )
     loaders = DataLoaders(training_loader, valid_loader)
 
