@@ -1,6 +1,5 @@
 #include "play.hpp"
 
-#include <folly/Executor.h>
 #include <folly/experimental/coro/Collect.h>
 #include <folly/experimental/coro/Task.h>
 #include <folly/logging/xlog.h>
@@ -18,8 +17,7 @@ struct GameResult {
     int wasted_inferences;
 };
 
-folly::coro::Task<> human_play(Board board, EvaluationFunction model,
-                               HumanPlayOptions const& opts) {
+folly::coro::Task<GameRecorder> interactive_play(Board board, InteractivePlayOptions opts) {
     std::cout << "Do you want to go first? (y/n): ";
     char first;
     std::cin >> first;
@@ -30,8 +28,9 @@ folly::coro::Task<> human_play(Board board, EvaluationFunction model,
 
     GameRecorder recorder(board, human_goes_first ? "Player" : "Deep Wallwars",
                           human_goes_first ? "Deep Wallwars" : "Player");
-    MCTS mcts{
-        model, std::move(board), {.max_parallelism = opts.max_parallel_samples, .seed = opts.seed}};
+    MCTS mcts{opts.model,
+              std::move(board),
+              {.max_parallelism = opts.max_parallel_samples, .seed = opts.seed}};
 
     bool take_turn = !human_goes_first;
     while (true) {
@@ -82,20 +81,21 @@ folly::coro::Task<> human_play(Board board, EvaluationFunction model,
     }
 
     XLOGF(INFO, "Game finished, json string: {}", recorder.to_json());
+    co_return recorder;
 }
 
-folly::coro::Task<GameResult> computer_play_single(const Board& board, EvaluationFunction evaluate1,
+folly::coro::Task<GameResult> training_play_single(const Board& board, EvaluationFunction evaluate1,
                                                    EvaluationFunction evaluate2, int index,
-                                                   ComputerPlayOptions const& opts) {
-    MCTS mcts1{
-        evaluate1,
-        board,
-        {.max_parallelism = opts.max_parallel_samples, .seed = static_cast<std::uint32_t>(index)}};
+                                                   TrainingPlayOptions opts) {
+    MCTS mcts1{evaluate1,
+               board,
+               {.max_parallelism = opts.max_parallel_samples,
+                .seed = opts.seed * static_cast<std::uint32_t>(index)}};
 
-    MCTS mcts2{
-        evaluate2,
-        board,
-        {.max_parallelism = opts.max_parallel_samples, .seed = static_cast<std::uint32_t>(index)}};
+    MCTS mcts2{evaluate2,
+               board,
+               {.max_parallelism = opts.max_parallel_samples,
+                .seed = opts.seed * static_cast<std::uint32_t>(index)}};
 
     XLOGF(INFO, "Starting game {}.", index);
 
@@ -151,15 +151,73 @@ folly::coro::Task<GameResult> computer_play_single(const Board& board, Evaluatio
     co_return {Winner::Undecided, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
 }
 
-folly::coro::Task<double> computer_play(Board board, EvaluationFunction evaluate1,
-                                        EvaluationFunction evaluate2, int games,
-                                        ComputerPlayOptions opts) {
-    folly::Executor* executor = co_await folly::coro::co_current_executor;
+folly::coro::Task<GameRecorder> evaluation_play_single(const Board& board, int index,
+                                                       EvaluationPlayOptions opts) {
+    auto const& red = index % 2 == 0 ? opts.model1 : opts.model2;
+    auto const& blue = index % 2 == 0 ? opts.model2 : opts.model1;
 
-    auto game_tasks =
-        views::iota(1, games + 1) | views::transform([&](int i) {
-            return computer_play_single(board, evaluate1, evaluate2, i, opts).scheduleOn(executor);
-        });
+    MCTS mcts1{red.model,
+               board,
+               {.max_parallelism = opts.max_parallel_samples,
+                .seed = opts.seed * static_cast<std::uint32_t>(index)}};
+
+    MCTS mcts2{blue.model,
+               board,
+               {.max_parallelism = opts.max_parallel_samples,
+                .seed = opts.seed * static_cast<std::uint32_t>(index)}};
+
+    XLOGF(INFO, "Starting game {} with {} as red and {} as blue.", index, red.name, blue.name);
+    GameRecorder recorder(board, red.name, blue.name);
+
+    for (int num_moves = 1; opts.move_limit == 0 || num_moves <= opts.move_limit; ++num_moves) {
+        auto move1 = co_await mcts1.sample_and_commit_to_move(opts.samples);
+        if (!move1) {
+            recorder.record_winner(Winner::Blue);
+            break;
+        }
+
+        recorder.record_move(Player::Red, *move1);
+        if (auto winner = mcts1.current_board().winner(); winner != Winner::Undecided) {
+            recorder.record_winner(winner);
+            break;
+        }
+
+        mcts2.force_move(*move1);
+        auto move2 = co_await mcts2.sample_and_commit_to_move(opts.samples);
+
+        if (!move2) {
+            recorder.record_winner(Winner::Red);
+            break;
+        }
+
+        recorder.record_move(Player::Blue, *move2);
+        if (auto winner = mcts2.current_board().winner(); winner != Winner::Undecided) {
+            recorder.record_winner(winner);
+            break;
+        }
+
+        mcts1.force_move(*move2);
+    }
+
+    XLOGF(INFO, "Game {} has concluded.", index);
+    co_return recorder;
+}
+
+folly::coro::Task<std::vector<GameRecorder>> evaluation_play(Board board, int games,
+                                                             EvaluationPlayOptions opts) {
+    auto game_tasks = views::iota(1, games + 1) | views::transform([&](int i) {
+                          return evaluation_play_single(board, i, opts);
+                      });
+
+    auto results = co_await folly::coro::collectAllWindowed(game_tasks, opts.max_parallel_games);
+
+    co_return results;
+}
+
+folly::coro::Task<> training_play(Board board, int games, TrainingPlayOptions opts) {
+    auto game_tasks = views::iota(1, games + 1) | views::transform([&](int i) {
+                          return training_play_single(board, opts.model1, opts.model2, i, opts);
+                      });
 
     auto results = co_await folly::coro::collectAllWindowed(game_tasks, opts.max_parallel_games);
     int red_wins = 0;
@@ -184,6 +242,37 @@ folly::coro::Task<double> computer_play(Board board, EvaluationFunction evaluate
     XLOGF(INFO, "Red's W/L/D statistic over {}/{} games is: {} / {} / {}", total_games, games,
           red_wins, blue_wins, draws);
     XLOGF(INFO, "{} inferences were wasted.", wasted_inferences);
+}
 
-    co_return double(red_wins) / games;
+folly::coro::Task<std::vector<GameRecorder>> ranking_play(Board board, int games_per_matchup,
+                                                          RankingPlayOptions opts) {
+    std::vector<folly::coro::Task<GameRecorder>> game_tasks;
+    std::vector<GameRecorder> recorders;
+
+    int game_index = 1;
+    std::size_t start_model =
+        opts.models_to_rank == 0 ? 0 : opts.models.size() - opts.models_to_rank;
+    for (std::size_t i = start_model; i < opts.models.size(); ++i) {
+        std::size_t rank_start_model = std::max(static_cast<int>(i) - opts.max_matchup_distance, 0);
+
+        for (std::size_t j = rank_start_model; j < i; ++j) {
+            EvaluationPlayOptions eval_opts{.model1 = opts.models[i],
+                                            .model2 = opts.models[j],
+
+                                            .samples = opts.samples,
+                                            .max_parallel_samples = opts.max_parallel_samples,
+                                            .move_limit = opts.move_limit,
+                                            .seed = opts.seed};
+            auto game_tasks =
+                views::iota(0, games_per_matchup) | views::transform([&, game_index](int i) {
+                    return evaluation_play_single(board, game_index + i, eval_opts);
+                });
+            game_index += games_per_matchup;
+            auto matchup_recorders = co_await folly::coro::collectAllWindowed(
+                std::move(game_tasks), opts.max_parallel_games);
+            recorders.insert(recorders.end(), matchup_recorders.begin(), matchup_recorders.end());
+        }
+    }
+
+    co_return recorders;
 }
