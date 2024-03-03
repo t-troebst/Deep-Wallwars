@@ -3,7 +3,10 @@
 #include <sstream>
 
 GameRecorder::GameRecorder(Board initial_board, std::string red_name, std::string blue_name)
-    : m_red_name{red_name}, m_blue_name{blue_name}, m_board_states{initial_board} {}
+    : m_red_name{red_name},
+      m_blue_name{blue_name},
+      m_board_states{initial_board},
+      m_outcome{Winner::Undecided} {}
 
 void GameRecorder::record_move(Player player, Move move) {
     Board last_board = m_board_states.back();
@@ -37,4 +40,49 @@ std::string GameRecorder::to_json() const {
 
     result << "\"}";
     return result.str();
+}
+
+std::string GameRecorder::to_pgn() const {
+    std::stringstream result;
+
+    result << "[White \"" << m_red_name << "\"][Black \"" << m_blue_name << "\"][Result \"";
+
+    switch (m_outcome) {
+        case Winner::Red:
+            result << "1-0";
+            break;
+        case Winner::Blue:
+            result << "0-1";
+            break;
+        case Winner::Draw:
+            result << "1/2-1/2";
+            break;
+        default:
+            result << "*";
+    }
+
+    // Yes, a random chess opening...
+    result << "\"] 1. c4 Nf6";
+
+    return result.str();
+}
+
+std::string all_to_json(std::vector<GameRecorder> const& recorders) {
+    std::string result;
+
+    for (GameRecorder const& recorder : recorders) {
+        result += recorder.to_json() + "\n";
+    }
+
+    return result;
+}
+
+std::string all_to_pgn(std::vector<GameRecorder> const& recorders) {
+    std::string result;
+
+    for (GameRecorder const& recorder : recorders) {
+        result += recorder.to_pgn() + "\n";
+    }
+
+    return result;
 }
