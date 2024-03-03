@@ -53,6 +53,8 @@ folly::coro::Task<GameRecorder> interactive_play(Board board, InteractivePlayOpt
             take_turn = true;
         }
 
+        XLOGF(INFO, "AI thinks your position is worth {}", mcts.root_value());
+
         // TODO: read in standard notation instead of this ad hoc solution
         std::array<Action, 2> actions;
         for (int i = 0; i < 2; ++i) {
