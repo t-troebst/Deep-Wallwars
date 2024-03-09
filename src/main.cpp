@@ -128,7 +128,7 @@ void evaluate(nv::IRuntime& runtime, std::string const& model1, std::string cons
     auto batched_model2 =
         std::make_shared<BatchedModel>(std::make_unique<TensorRTModel>(*engine2), 4096);
     BatchedModelPolicy batched_model_policy2(batched_model2);
-    CachedPolicy cached_policy2(batched_model_policy1, FLAGS_cache_size);
+    CachedPolicy cached_policy2(batched_model_policy2, FLAGS_cache_size);
 
     Board board{FLAGS_columns, FLAGS_rows};
 
