@@ -20,6 +20,18 @@ void GameRecorder::record_winner(Winner winner) {
     m_outcome = winner;
 }
 
+std::string const& GameRecorder::red() const {
+    return m_red_name;
+}
+
+std::string const& GameRecorder::blue() const {
+    return m_blue_name;
+}
+
+Winner GameRecorder::winner() const {
+    return m_outcome;
+}
+
 std::string GameRecorder::to_json() const {
     std::stringstream result;
 
@@ -65,6 +77,36 @@ std::string GameRecorder::to_pgn() const {
     result << "\"] 1. c4 Nf6";
 
     return result.str();
+}
+
+std::unordered_map<std::string, GameResults> tally_results(
+    std::vector<GameRecorder> const& recorders) {
+    std::unordered_map<std::string, GameResults> results;
+
+    for (GameRecorder const& recorder : recorders) {
+        auto& red_result = results[recorder.red()];
+        auto& blue_result = results[recorder.blue()];
+
+        switch (recorder.winner()) {
+            case Winner::Red:
+                ++red_result.wins;
+                ++blue_result.losses;
+                break;
+            case Winner::Blue:
+                ++red_result.losses;
+                ++blue_result.wins;
+                break;
+            case Winner::Draw:
+                ++red_result.draws;
+                ++blue_result.draws;
+                break;
+            default:
+                ++red_result.undecided;
+                ++blue_result.undecided;
+        }
+    }
+
+    return results;
 }
 
 std::string all_to_json(std::vector<GameRecorder> const& recorders) {

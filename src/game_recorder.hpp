@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "gamestate.hpp"
@@ -11,6 +12,10 @@ public:
 
     void record_move(Player player, Move move);
     void record_winner(Winner winner);
+
+    std::string const& red() const;
+    std::string const& blue() const;
+    Winner winner() const;
 
     // This is for wallwars.net.
     std::string to_json() const;
@@ -26,6 +31,16 @@ private:
     std::vector<Move> m_moves;
     Winner m_outcome;
 };
+
+struct GameResults {
+    int wins = 0;
+    int losses = 0;
+    int draws = 0;
+    int undecided = 0;
+};
+
+std::unordered_map<std::string, GameResults> tally_results(
+    std::vector<GameRecorder> const& recorders);
 
 std::string all_to_json(std::vector<GameRecorder> const& recorders);
 std::string all_to_pgn(std::vector<GameRecorder> const& recorders);

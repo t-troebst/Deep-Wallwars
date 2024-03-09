@@ -133,14 +133,20 @@ void evaluate(nv::IRuntime& runtime, std::string const& model1, std::string cons
     Board board{FLAGS_columns, FLAGS_rows};
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
-    folly::coro::blockingWait(evaluation_play(board, FLAGS_games,
-                                              {
-                                                  .model1 = {cached_policy1, "Model1"},
-                                                  .model2 = {cached_policy2, "Model2"},
-                                                  .samples = FLAGS_samples,
-                                                  .seed = FLAGS_seed,
-                                              })
-                                  .scheduleOn(&thread_pool));
+    auto recorders =
+        folly::coro::blockingWait(evaluation_play(board, FLAGS_games,
+                                                  {
+                                                      .model1 = {cached_policy1, "Model1"},
+                                                      .model2 = {cached_policy2, "Model2"},
+                                                      .samples = FLAGS_samples,
+                                                      .seed = FLAGS_seed,
+                                                  })
+                                      .scheduleOn(&thread_pool));
+
+    for (auto const& [player, results] : tally_results(recorders)) {
+        XLOGF(INFO, "{} has a W/L/D of {}/{}/{}.", player, results.wins, results.losses,
+              results.draws);
+    }
 }
 
 void evaluate_simple(nv::IRuntime& runtime, std::string const& model1) {
