@@ -49,7 +49,7 @@ bool folly::HeterogeneousAccessEqualTo<CacheEntry>::operator()(CacheEntry const&
 CachedPolicy::CachedPolicy(EvaluationFunction evaluate, std::size_t capacity, unsigned shards)
     : m_cache{std::make_shared<EvaluationCache>(std::move(evaluate))} {
     for (unsigned i = 0; i < shards; ++i) {
-        m_cache->lrus.emplace_back(folly::in_place_t(), capacity / shards);
+        m_cache->lrus.emplace_back(std::in_place, capacity / shards);
     }
 }
 
