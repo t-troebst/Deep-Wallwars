@@ -9,3 +9,6 @@ trained_models/
 compile_commands.json
 .cache
 model.pt
+.cursor/
+settings.json
+ignore/

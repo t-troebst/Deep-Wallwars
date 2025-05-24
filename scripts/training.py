@@ -1,18 +1,20 @@
-import torch
-import torch.onnx
 import subprocess
 import argparse
 import gc
+import os
+print("Importing torch...")  # Print because it takes a while
+import torch
+import torch.onnx
 import torch.nn as nn
 import torch.functional as F
+print("Importing fastai...")
 from fastai.data.all import DataLoader, DataLoaders
 from fastai.learner import Learner
 from fastai.callback.schedule import lr_find
-
 from model import ResNet
 from data import get_datasets
 
-device = torch.device("cuda:0")
+default_cuda_device = "cuda:0"
 input_channels = 8
 bootstrap_epochs = 10
 
@@ -111,29 +113,39 @@ def get_training_paths(generation):
     return [f"{args.data}/generation_{i}" for i in range(lb, generation)]
 
 
-def save_model(model, name):
-    torch.save(model, f"{args.models}/{name}.pt")
+def save_model(model, name, device):
+    if not os.path.exists(args.models):
+        print(f"Error: Models directory '{args.models}' passed with --models does not exist.")
+        print(f"Create the directory first: mkdir -p {args.models}")
+        exit(1)
+    
+    pt_path = f"{args.models}/{name}.pt"
+    onnx_path = f"{args.models}/{name}.onnx"
+    trt_path = f"{args.models}/{name}.trt"
+
+    print(f"Saving PyTorch model to {pt_path}...")
+    torch.save(model, pt_path)
     input_names = ["States"]
     output_names = ["Priors", "Values"]
     dummy_input = torch.randn(
         args.inference_batch_size, input_channels, args.columns, args.rows
     ).to(device)
     model.log_output = False
-    print("Exporting onnx...")
+    print(f"Exporting ONNX model to {onnx_path}...")
     torch.onnx.export(
         model,
         dummy_input,
-        f"{args.models}/{name}.onnx",
+        onnx_path,
         input_names=input_names,
         output_names=output_names,
     )
-    print("Converting onnx to trt...")
+    print(f"Converting ONNX model to TensorRT engine ({trt_path})...")
     with open(args.log, "a") as f:
         subprocess.run(
             [
                 "trtexec",
-                f"--onnx={args.models}/{name}.onnx",
-                f"--saveEngine={args.models}/{name}.trt",
+                f"--onnx={onnx_path}",
+                f"--saveEngine={trt_path}",
                 "--fp16",
             ],
             stdout=f,
@@ -142,36 +154,55 @@ def save_model(model, name):
     model.log_output = True
 
 
-def load_model(name):
+def load_model(name, device):
     return torch.load(f"{args.models}/{name}.pt").to(device)
 
 
 def run_self_play(model1, model2, generation):
     print(f"Running self play (generation {generation})...")
+    cmd = [
+        args.deep_ww,
+        "-model1",
+        model1,
+        "-model2", 
+        model2,
+        "-output",
+        f"{args.data}/generation_{generation}",
+        "-columns",
+        str(args.columns),
+        "-rows", 
+        str(args.rows),
+        "-j",
+        str(args.threads),
+        "-games",
+        str(args.games),
+        "-samples",
+        str(args.samples),
+    ]
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+    )
+    
+    # Write output to log file
     with open(args.log, "a") as f:
-        subprocess.run(
-            [
-                args.deep_ww,
-                "-model1",
-                model1,
-                "-model2",
-                model2,
-                "-output",
-                f"{args.data}/generation_{generation}",
-                "-columns",
-                str(args.columns),
-                "-rows",
-                str(args.rows),
-                "-j",
-                str(args.threads),
-                "-games",
-                str(args.games),
-                "-samples",
-                str(args.samples),
-            ],
-            stdout=f,
-            stderr=f,
-        )
+        if result.stdout:
+            f.write(result.stdout)
+        if result.stderr:
+            f.write(result.stderr)
+    
+    if result.returncode != 0:
+        print(f"Error: Self play failed with return code {result.returncode}")
+        print("Command executed:")
+        print(" ".join(cmd))
+        if result.stdout:
+            print("Standard output:")
+            print(result.stdout)
+        if result.stderr:
+            print("Error output:")
+            print(result.stderr)
+        exit(1)
 
 
 def predict_valuation(xs):
@@ -200,11 +231,20 @@ def loss(out, label):
     return kl_div(priors_out, priors_label) + mse(values_out, values_label)
 
 
-def train_model(model, generation, epochs):
+def train_model(model, generation, epochs, device):
     print(f"Loading training data (generation {generation})...")
+    training_paths = get_training_paths(generation)
+    print(f"Training paths: {training_paths}")
     training_data, valid_data = get_datasets(
-        get_training_paths(generation), args.training_games, args.columns, args.rows
+        training_paths, args.training_games, input_channels, args.columns, args.rows
     )
+
+    if not training_data:
+        print(f"Error: No training data found for generation {generation}.")
+        print(f"Looked for data in the following paths: {training_paths}")
+        print(f"Please check the '--data' argument (currently '{args.data}')")
+        exit(1)
+
     training_loader = DataLoader(
         training_data,
         bs=args.training_batch_size,
@@ -229,23 +269,32 @@ def train_model(model, generation, epochs):
     print(f"Training generation {generation} with learning rate {learning_rate}...")
     learner.fit(epochs, learning_rate)
 
+def init():
+    device = torch.device(default_cuda_device)
 
-# Bootstrap generation 0 data
-if args.initial_generation == 0:
-    run_self_play("simple", "simple", 0)
-    model = ResNet(args.columns, args.rows, args.hidden_channels, args.layers)
-    start_generation = 2
-    train_model(model, 1, bootstrap_epochs)
-    save_model(model, "model_1")
-    gc.collect()
-else:
-    model = load_model(f"model_{args.initial_generation}")
-    save_model(model, f"model_{args.initial_generation}")
-    start_generation = args.initial_generation + 1
+    print("Starting training...")
+    if args.initial_generation == 0:
+        print("Bootstrap generation 0 data with simple model")
+        print("Running self play for generation 0...")
+        run_self_play("simple", "", 0)
+        model = ResNet(args.columns, args.rows, args.hidden_channels, args.layers)
+        start_generation = 2
+        train_model(model, 1, bootstrap_epochs, device)
+        save_model(model, "model_1", device)
+        gc.collect()
+    else:
+        print(f"Loading model from generation {args.initial_generation}...")
+        model = load_model(f"model_{args.initial_generation}", device)
+        save_model(model, f"model_{args.initial_generation}", device)
+        start_generation = args.initial_generation + 1
+
+    for generation in range(start_generation, start_generation + args.generations - 1):
+        run_self_play(f"{args.models}/model_{generation - 1}.trt", "", generation - 1)
+        train_model(model, generation, args.epochs, device)
+        save_model(model, f"model_{generation}", device)
+        gc.collect()
 
 
-for generation in range(start_generation, start_generation + args.generations - 1):
-    run_self_play(f"{args.models}/model_{generation - 1}.trt", "", generation - 1)
-    train_model(model, generation, args.epochs)
-    save_model(model, f"model_{generation}")
-    gc.collect()
+if __name__ == "__main__":
+    init()
+
