@@ -14,11 +14,12 @@ class IExecutionContext;
 
 class TensorRTModel : public Model {
 public:
-    TensorRTModel(nvinfer1::ICudaEngine& engine);
+    TensorRTModel(std::shared_ptr<nvinfer1::ICudaEngine> engine);
 
     void inference(std::span<float> states, Output const& out) override;
 
 private:
+    std::shared_ptr<nvinfer1::ICudaEngine> m_engine;  // Keep engine alive
     std::unique_ptr<nvinfer1::IExecutionContext> m_context;
 
     CudaStream m_stream;
@@ -27,5 +28,5 @@ private:
     CudaBuffer<float> m_values;
 };
 
-std::unique_ptr<nvinfer1::ICudaEngine> load_serialized_engine(nvinfer1::IRuntime& runtime,
+std::shared_ptr<nvinfer1::ICudaEngine> load_serialized_engine(nvinfer1::IRuntime& runtime,
                                                               std::istream& binary_in);

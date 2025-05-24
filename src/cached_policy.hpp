@@ -8,6 +8,8 @@
 #include <atomic>
 
 #include "mcts.hpp"
+#include "batched_model.hpp"
+#include "batched_model_policy.hpp"
 
 struct CacheEntry {
     Board board;
@@ -49,6 +51,14 @@ public:
 
     int cache_hits() const;
     int cache_misses() const;
+
+    // Returns the underlying BatchedModel if this policy wraps one, nullptr otherwise
+    std::shared_ptr<BatchedModel> get_batched_model() const {
+        if (auto* policy = m_cache->evaluate.target<BatchedModelPolicy>()) {
+            return policy->m_model;
+        }
+        return nullptr;
+    }
 
 private:
     using LRU = folly::EvictingCacheMap<CacheEntry, Evaluation>;
