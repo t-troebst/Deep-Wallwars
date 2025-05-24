@@ -45,6 +45,37 @@ DEFINE_string(ranking, "", "Folder of *.trt models to rank against each other");
 DEFINE_int32(rank_last, 5, "Number of models that each model plays against during ranking");
 DEFINE_int32(models_to_rank, 0, "Number of models that play games for ranking (0 for all)");
 
+const int kBatchedModelQueueSize = 4096;
+
+// Factory functions for policy creation
+SimplePolicy create_simple_policy() {
+    return SimplePolicy(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
+}
+
+CachedPolicy create_model_policy(nv::IRuntime& runtime, std::string const& model_path, int num_models) {
+    std::ifstream model_file(model_path, std::ios::binary);
+    if (!model_file) {
+        throw std::runtime_error("Failed to open model file: " + model_path);
+    }
+    auto engine = load_serialized_engine(runtime, model_file);
+    if (!engine) {
+        throw std::runtime_error("Failed to load TensorRT engine from: " + model_path);
+    }
+    
+    std::vector<std::unique_ptr<Model>> tensor_rt_models;
+    // Probably two is enough, more models = more parallelizable work for the
+    // scheduler on the GPU so you can get slightly higher GPU utilization
+    for (int i = 0; i < num_models; i++) {
+        tensor_rt_models.push_back(std::make_unique<TensorRTModel>(engine));
+    }
+    auto batched_model = std::make_shared<BatchedModel>(
+        std::move(tensor_rt_models),
+        kBatchedModelQueueSize
+    );
+    BatchedModelPolicy batched_model_policy(std::move(batched_model));
+    return CachedPolicy(std::move(batched_model_policy), FLAGS_cache_size);
+}
+
 std::string get_usage_message() {
     std::ostringstream oss;
     oss << "Deep Wallwars Usage:\n\n"
@@ -100,18 +131,8 @@ struct Logger : nv::ILogger {
 };
 
 void train(nv::IRuntime& runtime, std::string const& model) {
-    std::ifstream model_file(model, std::ios::binary);
-    auto engine = load_serialized_engine(runtime, model_file);
-
-    std::vector<std::unique_ptr<Model>> tensor_rt_models;
-    tensor_rt_models.push_back(std::make_unique<TensorRTModel>(*engine));
-    tensor_rt_models.push_back(std::make_unique<TensorRTModel>(*engine));
-    tensor_rt_models.push_back(std::make_unique<TensorRTModel>(*engine));
-
-    auto batched_model = std::make_shared<BatchedModel>(std::move(tensor_rt_models), 4096);
+    auto cached_policy = create_model_policy(runtime, model, 3);
     TrainingDataPrinter training_data_printer(FLAGS_output, 0.5);
-    BatchedModelPolicy batched_model_policy(batched_model);
-    CachedPolicy cached_policy(batched_model_policy, FLAGS_cache_size);
     Board board{FLAGS_columns, FLAGS_rows};
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
@@ -127,15 +148,18 @@ void train(nv::IRuntime& runtime, std::string const& model) {
 
     XLOGF(INFO, "{} cache hits, {} cache misses during play.", cached_policy.cache_hits(),
           cached_policy.cache_misses());
-    auto inferences = batched_model->total_inferences();
-    auto batches = batched_model->total_batches();
-    XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", inferences, batches,
-          double(inferences) / batches);
+    
+    // Get batched model stats
+    if (auto batched_model = cached_policy.get_batched_model()) {
+        auto inferences = batched_model->total_inferences();
+        auto batches = batched_model->total_batches();
+        XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", inferences, batches,
+              double(inferences) / batches);
+    }
 }
 
 void train_simple() {
-    SimplePolicy simple_policy(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
-
+    auto simple_policy = create_simple_policy();
     Board board{FLAGS_columns, FLAGS_rows};
     TrainingDataPrinter training_data_printer(FLAGS_output, 0.5);
 
@@ -152,20 +176,8 @@ void train_simple() {
 }
 
 void evaluate(nv::IRuntime& runtime, std::string const& model1, std::string const& model2) {
-    std::ifstream model1_file(model1, std::ios::binary);
-    auto engine1 = load_serialized_engine(runtime, model1_file);
-    auto batched_model1 =
-        std::make_shared<BatchedModel>(std::make_unique<TensorRTModel>(*engine1), 4096);
-    BatchedModelPolicy batched_model_policy1(batched_model1);
-    CachedPolicy cached_policy1(batched_model_policy1, FLAGS_cache_size);
-
-    std::ifstream model2_file(model2, std::ios::binary);
-    auto engine2 = load_serialized_engine(runtime, model2_file);
-    auto batched_model2 =
-        std::make_shared<BatchedModel>(std::make_unique<TensorRTModel>(*engine2), 4096);
-    BatchedModelPolicy batched_model_policy2(batched_model2);
-    CachedPolicy cached_policy2(batched_model_policy2, FLAGS_cache_size);
-
+    auto cached_policy1 = create_model_policy(runtime, model1, 1);
+    auto cached_policy2 = create_model_policy(runtime, model2, 1);
     Board board{FLAGS_columns, FLAGS_rows};
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
@@ -186,16 +198,10 @@ void evaluate(nv::IRuntime& runtime, std::string const& model1, std::string cons
 }
 
 void evaluate_simple(nv::IRuntime& runtime, std::string const& model1) {
-    std::ifstream model1_file(model1, std::ios::binary);
-    auto engine1 = load_serialized_engine(runtime, model1_file);
-    auto batched_model =
-        std::make_shared<BatchedModel>(std::make_unique<TensorRTModel>(*engine1), 4096);
-    BatchedModelPolicy batched_model_policy(batched_model);
-    CachedPolicy cached_policy(batched_model_policy, FLAGS_cache_size);
-    SimplePolicy simple_policy(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
+    auto cached_policy = create_model_policy(runtime, model1, 1);
+    auto simple_policy = create_simple_policy();
 
     Board board{FLAGS_columns, FLAGS_rows};
-
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
 
     folly::coro::blockingWait(evaluation_play(board, FLAGS_games,
@@ -209,16 +215,20 @@ void evaluate_simple(nv::IRuntime& runtime, std::string const& model1) {
 
     XLOGF(INFO, "{} cache hits, {} cache misses during play.", cached_policy.cache_hits(),
           cached_policy.cache_misses());
-    auto inferences = batched_model->total_inferences();
-    auto batches = batched_model->total_batches();
-    XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", inferences, batches,
-          double(inferences) / batches);
+    
+    // Get batched model stats
+    if (auto batched_model = cached_policy.get_batched_model()) {
+        auto inferences = batched_model->total_inferences();
+        auto batches = batched_model->total_batches();
+        XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", inferences, batches,
+              double(inferences) / batches);
+    }
 }
 
 void interactive_simple() {
-    SimplePolicy simple_policy(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
-
+    auto simple_policy = create_simple_policy();
     Board board{FLAGS_columns, FLAGS_rows};
+    
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
     folly::coro::blockingWait(interactive_play(board,
                                                {
@@ -230,18 +240,13 @@ void interactive_simple() {
 }
 
 void interactive(nv::IRuntime& runtime, std::string const& model) {
-    std::ifstream model1_file(model, std::ios::binary);
-    auto engine1 = load_serialized_engine(runtime, model1_file);
-    auto batched_model1 =
-        std::make_shared<BatchedModel>(std::make_unique<TensorRTModel>(*engine1), 4096);
-    BatchedModelPolicy batched_model_policy1(batched_model1);
-    CachedPolicy cached_policy1(batched_model_policy1, FLAGS_cache_size);
-
+    auto cached_policy = create_model_policy(runtime, model, 1);
     Board board{FLAGS_columns, FLAGS_rows};
+    
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
     folly::coro::blockingWait(interactive_play(board,
                                                {
-                                                   .model = cached_policy1,
+                                                   .model = cached_policy,
                                                    .samples = FLAGS_samples,
                                                    .seed = FLAGS_seed,
                                                })
@@ -261,13 +266,8 @@ void ranking(nv::IRuntime& runtime) {
     std::vector<NamedModel> models;
 
     for (auto const& [_, model_path] : model_paths) {
-        std::ifstream model_file{model_path, std::ios_base::binary};
-        engines.push_back(load_serialized_engine(runtime, model_file));
-        auto batched_model =
-            std::make_shared<BatchedModel>(std::make_unique<TensorRTModel>(*engines.back()), 4096);
-        BatchedModelPolicy batched_model_policy(std::move(batched_model));
-        CachedPolicy cached_policy1(std::move(batched_model_policy), FLAGS_cache_size);
-        models.push_back({std::move(cached_policy1), model_path.filename()});
+        auto cached_policy = create_model_policy(runtime, model_path.string(), 1);
+        models.push_back({std::move(cached_policy), model_path.filename()});
     }
 
     Board board{FLAGS_columns, FLAGS_rows};
