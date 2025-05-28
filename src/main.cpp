@@ -19,6 +19,9 @@
 #include "simple_policy.hpp"
 #include "state_conversions.hpp"
 #include "tensorrt_model.hpp"
+#ifdef GUI_ENABLED
+#include "gui/game_gui.hpp"
+#endif
 
 namespace nv = nvinfer1;
 
@@ -40,6 +43,7 @@ DEFINE_double(good_move, 1.5, "Good move bias of simple agent");
 DEFINE_double(bad_move, 0.75, "Bad move bias of simple agent");
 
 DEFINE_bool(interactive, false, "Enable interactive play against the AI");
+DEFINE_bool(gui, false, "Use GUI instead of console for interactive mode");
 
 DEFINE_string(ranking, "", "Folder of *.trt models to rank against each other");
 DEFINE_int32(rank_last, 5, "Number of models that each model plays against during ranking");
@@ -65,8 +69,14 @@ EvaluationFunction create_and_validate_model(nv::IRuntime& runtime, std::string 
     std::ifstream model_file(model_flag, std::ios::binary);
     if (!model_file) {
         throw std::runtime_error("Failed to open model file: " + model_flag);
+    }  
+    XLOGF(INFO, "Loading TensorRT engine from: {}", model_flag);  
+    std::shared_ptr<nv::ICudaEngine> engine;
+    try {
+        engine = load_serialized_engine(runtime, model_file);
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Failed to load TensorRT engine from " + model_flag + ": " + e.what());
     }
-    auto engine = load_serialized_engine(runtime, model_file);
     if (!engine) {
         throw std::runtime_error("Failed to load TensorRT engine from: " + model_flag);
     }
@@ -93,6 +103,7 @@ std::string get_usage_message() {
         << "    --models_to_rank N # Number of models to rank (0 for all)\n"
         << "INTERACTIVE: Play against the AI\n"
         << "    ./deep_ww --interactive --model1 <model.trt | simple>\n"
+        << "    ./deep_ww --interactive --model1 <model.trt | simple> --gui  # Use GUI instead of console\n"
         << "TRAINING: Generate training data via self-play\n"
         << "    ./deep_ww --model1 <model.trt | simple>\n"
         << "  Options:\n"
@@ -200,13 +211,21 @@ void evaluate(EvaluationFunction const& eval_fn1, EvaluationFunction const& eval
 void interactive(EvaluationFunction const& eval_fn) {
     Board board{FLAGS_columns, FLAGS_rows};
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
-    folly::coro::blockingWait(interactive_play(board,
-                                               {
-                                                   .model = eval_fn,
-                                                   .samples = FLAGS_samples,
-                                                   .seed = FLAGS_seed,
-                                               })
-                                  .scheduleOn(&thread_pool));
+    InteractivePlayOptions opts = {
+        .model = eval_fn,
+        .samples = FLAGS_samples,
+        .seed = FLAGS_seed,
+    };
+    
+#ifdef GUI_ENABLED
+    if (FLAGS_gui) {
+        folly::coro::blockingWait(GUI::interactive_play_gui(board, opts)
+                                      .scheduleOn(&thread_pool));
+        return;
+    }
+#endif
+    folly::coro::blockingWait(interactive_play(board, opts)
+                                      .scheduleOn(&thread_pool));
 }
 
 void ranking(nv::IRuntime& runtime) {
@@ -263,6 +282,11 @@ int main(int argc, char** argv) {
 
     Logger logger;
     std::unique_ptr<nv::IRuntime> runtime{nv::createInferRuntime(logger)};
+    
+    if (!runtime) {
+        XLOG(ERR, "Failed to create TensorRT runtime. CUDA may be not available or out of memory.");
+        return 1;
+    }
 
     Mode mode;
     if (FLAGS_ranking != "") {
@@ -299,6 +323,12 @@ int main(int argc, char** argv) {
             XLOG(ERR, "Interactive mode does not support --model2.");
             return 1;
         }
+#ifndef GUI_ENABLED
+        if (FLAGS_gui) {
+            XLOG(ERR, "GUI support not available. This build was compiled without SFML. Install libsfml-dev and rebuild to enable GUI support.");
+            return 1;
+        }
+#endif
     }
 
     EvaluationFunction eval_fn1, eval_fn2;

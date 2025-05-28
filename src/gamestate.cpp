@@ -680,3 +680,24 @@ std::uint64_t std::hash<Board>::operator()(Board const& board) const {
         board.m_board.begin(), board.m_board.end(), position_hash,
         [](Board::State state) { return std::bit_cast<std::uint8_t>(state); });
 }
+
+std::optional<Player> Board::wall_owner(Wall wall) const {
+    if (!is_blocked(wall)) {
+        return std::nullopt;
+    }
+    State const state = state_at(wall.cell);
+    if (wall.type == Wall::Down) {
+        if (state.has_red_down_wall) {
+            return Player::Red;
+        } else if (state.has_blue_down_wall) {
+            return Player::Blue;
+        }
+    } else { // Wall::Right
+        if (state.has_red_right_wall) {
+            return Player::Red;
+        } else if (state.has_blue_right_wall) {
+            return Player::Blue;
+        }
+    }
+    return std::nullopt;
+}
