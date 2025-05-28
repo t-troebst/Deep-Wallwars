@@ -121,6 +121,8 @@ public:
     int distance(Cell start, Cell target) const;
     void fill_relative_distances(Cell start, std::span<float> dists) const;
 
+    std::optional<Player> wall_owner(Wall wall) const;
+
     std::vector<std::array<bool, 4>> blocked_directions() const;
     void fill_relative_distances(Cell start, std::span<float> dists,
                                  std::vector<std::array<bool, 4>> const& blocked_dirs) const;
