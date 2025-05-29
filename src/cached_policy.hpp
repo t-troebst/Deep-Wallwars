@@ -50,6 +50,11 @@ public:
     int cache_hits() const;
     int cache_misses() const;
 
+    // Returns a reference to the underlying policy
+    EvaluationFunction const& underlying_policy() const {
+        return m_cache->evaluate;
+    }
+
 private:
     using LRU = folly::EvictingCacheMap<CacheEntry, Evaluation>;
 
