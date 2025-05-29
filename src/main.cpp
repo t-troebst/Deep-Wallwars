@@ -158,8 +158,8 @@ void train(EvaluationFunction const& eval_fn) {
         
         // Get batched model stats
         if (auto* policy = cached_policy->underlying_policy().target<BatchedModelPolicy>()) {
-            auto inferences = policy->m_model->total_inferences();
-            auto batches = policy->m_model->total_batches();
+            auto inferences = policy->total_inferences();
+            auto batches = policy->total_batches();
             XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", 
                   inferences, batches, double(inferences) / batches);
         }
@@ -192,8 +192,8 @@ void evaluate(EvaluationFunction const& eval_fn1, EvaluationFunction const& eval
         
         // Get batched model stats for first model
         if (auto* policy = cached_policy->underlying_policy().target<BatchedModelPolicy>()) {
-            auto inferences = policy->m_model->total_inferences();
-            auto batches = policy->m_model->total_batches();
+            auto inferences = policy->total_inferences();
+            auto batches = policy->total_batches();
             XLOGF(INFO, "Model1: {} inferences were sent in {} batches ({} per batch)", 
                   inferences, batches, double(inferences) / batches);
         }
