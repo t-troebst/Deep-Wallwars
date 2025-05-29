@@ -157,9 +157,9 @@ void train(EvaluationFunction const& eval_fn) {
               cached_policy->cache_hits(), cached_policy->cache_misses());
         
         // Get batched model stats
-        if (auto batched_model = cached_policy->get_batched_model()) {
-            auto inferences = batched_model->total_inferences();
-            auto batches = batched_model->total_batches();
+        if (auto* policy = cached_policy->underlying_policy().target<BatchedModelPolicy>()) {
+            auto inferences = policy->m_model->total_inferences();
+            auto batches = policy->m_model->total_batches();
             XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", 
                   inferences, batches, double(inferences) / batches);
         }
@@ -185,16 +185,16 @@ void evaluate(EvaluationFunction const& eval_fn1, EvaluationFunction const& eval
               results.draws);
     }
 
-    // Get cache stats if available
+    // Get cache stats for first model if available
     if (auto* cached_policy = eval_fn1.target<CachedPolicy>()) {
-        XLOGF(INFO, "{} cache hits, {} cache misses during play.", 
+        XLOGF(INFO, "Model1: {} cache hits, {} cache misses during play.", 
               cached_policy->cache_hits(), cached_policy->cache_misses());
         
-        // Get batched model stats
-        if (auto batched_model = cached_policy->get_batched_model()) {
-            auto inferences = batched_model->total_inferences();
-            auto batches = batched_model->total_batches();
-            XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", 
+        // Get batched model stats for first model
+        if (auto* policy = cached_policy->underlying_policy().target<BatchedModelPolicy>()) {
+            auto inferences = policy->m_model->total_inferences();
+            auto batches = policy->m_model->total_batches();
+            XLOGF(INFO, "Model1: {} inferences were sent in {} batches ({} per batch)", 
                   inferences, batches, double(inferences) / batches);
         }
     }

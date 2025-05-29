@@ -52,12 +52,9 @@ public:
     int cache_hits() const;
     int cache_misses() const;
 
-    // Returns the underlying BatchedModel if this policy wraps one, nullptr otherwise
-    std::shared_ptr<BatchedModel> get_batched_model() const {
-        if (auto* policy = m_cache->evaluate.target<BatchedModelPolicy>()) {
-            return policy->m_model;
-        }
-        return nullptr;
+    // Returns a reference to the underlying policy
+    EvaluationFunction const& underlying_policy() const {
+        return m_cache->evaluate;
     }
 
 private:
