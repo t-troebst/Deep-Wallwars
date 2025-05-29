@@ -8,8 +8,6 @@
 #include <atomic>
 
 #include "mcts.hpp"
-#include "batched_model.hpp"
-#include "batched_model_policy.hpp"
 
 struct CacheEntry {
     Board board;
