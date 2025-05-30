@@ -14,8 +14,8 @@ BoardRenderer::BoardRenderer(sf::RenderWindow& window, const LayoutDimensions& l
 bool BoardRenderer::loadBundledFont() {
     // Try different paths since executable might run from build/ directory
     std::vector<std::string> font_paths = {
-        "../assets/gui/fonts/DejaVuSans.ttf"    // From build/ directory
-        "assets/gui/fonts/DejaVuSans.ttf",      // From project root
+        "../assets/gui/fonts/DejaVuSans.ttf",   // From build/ directory
+        "assets/gui/fonts/DejaVuSans.ttf"       // From project root
     };
     
     for (const auto& path : font_paths) {
