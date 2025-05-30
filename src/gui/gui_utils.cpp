@@ -1,3 +1,4 @@
+#include "gui_utils.hpp"
 #include "gui_constants.hpp"
 #include <algorithm>
 

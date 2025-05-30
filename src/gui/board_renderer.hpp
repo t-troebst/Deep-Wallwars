@@ -3,6 +3,7 @@
 #include <SFML/Graphics.hpp>
 #include "../gamestate.hpp"
 #include "gui_constants.hpp"
+#include "gui_utils.hpp"
 
 namespace GUI {
 
@@ -65,6 +66,9 @@ private:
     // Helper functions
     std::vector<Cell> getCellsAtDistance1(const Board& board, Player player);
     std::vector<Cell> getCellsAtDistance2(const Board& board, Player player);
+    
+    // Font loading helper
+    bool loadBundledFont();
 };
 
 } // namespace GUI 

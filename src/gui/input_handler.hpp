@@ -4,6 +4,7 @@
 #include <optional>
 #include "../gamestate.hpp"
 #include "gui_constants.hpp"
+#include "gui_utils.hpp"
 
 namespace GUI {
 
