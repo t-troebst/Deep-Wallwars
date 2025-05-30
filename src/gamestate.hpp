@@ -167,8 +167,16 @@ private:
     State& state_at(Cell cell);
     State state_at(Cell cell) const;
 
-    std::pair<bool, int> find_bridges(Cell start, Cell target, int level, std::vector<int>& levels,
-                                      std::set<Wall>& bridges) const;
+    struct StackFrame {
+        Cell cell;
+        int level;
+        int dir_index;
+        bool target_found;
+        int min_level;
+    };
+
+    void find_bridges(Cell start, Cell target, std::vector<int>& levels, std::set<Wall>& bridges,
+                                         std::vector<StackFrame>& stack) const;
 };
 
 namespace std {

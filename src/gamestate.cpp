@@ -344,50 +344,70 @@ std::vector<Direction> Board::legal_directions(Player player) const {
     return {dirs.begin(), dirs.end()};
 }
 
-std::pair<bool, int> Board::find_bridges(Cell start, Cell target, int level,
-                                         std::vector<int>& levels, std::set<Wall>& bridges) const {
-    levels[index_from_cell(start)] = level;
-    bool target_found = start == target;
-    int min_level = level;
-
-    for (Direction dir : kDirections) {
-        Wall const wall{start, dir};
-
-        if (is_blocked(wall)) {
-            continue;
-        }
-
-        Cell const neighbor = start.step(dir);
-        int const neighbor_level = levels[index_from_cell(neighbor)];
-
-        if (neighbor_level == level - 1) {
-            continue;
-        }
-
-        if (neighbor_level == -1) {
-            auto const [sub_found, sub_level] =
-                find_bridges(neighbor, target, level + 1, levels, bridges);
-            target_found = target_found || sub_found;
-            min_level = std::min(min_level, sub_level);
-
-            if (sub_found && sub_level > level) {
-                bridges.insert(wall);
+void Board::find_bridges(Cell start, Cell target, 
+                                         std::vector<int>& levels, std::set<Wall>& bridges,
+                                         std::vector<Board::StackFrame>& stack) const {
+  
+    // Initialize start cell
+    levels[index_from_cell(start)] = 1;
+    stack[0] = {start, 1, 0, start == target, 1};
+    int stack_size = 1;
+    
+    while (stack_size > 0) {
+        auto& frame = stack[stack_size - 1];
+        
+        // Look for unprocessed neighbors starting from current dir_index
+        bool found_unprocessed = false;
+        for (int dir_idx = frame.dir_index; dir_idx < 4; ++dir_idx) {
+            Direction dir = kDirections[dir_idx];
+            Wall wall{frame.cell, dir};
+            
+            if (is_blocked(wall)) continue;
+            
+            Cell neighbor = frame.cell.step(dir);
+            int neighbor_level = levels[index_from_cell(neighbor)];
+            
+            if (neighbor_level == frame.level - 1) continue; // parent
+            
+            if (neighbor_level == -1) {
+                // Found unprocessed neighbor - add to stack
+                levels[index_from_cell(neighbor)] = frame.level + 1;
+                frame.dir_index = dir_idx + 1; // Resume from next direction when we return
+                stack[stack_size++] = {neighbor, frame.level + 1, 0, neighbor == target, frame.level + 1};
+                found_unprocessed = true;
+                break;
+            } else {
+                // Already visited - update min_level
+                frame.min_level = std::min(frame.min_level, neighbor_level);
             }
-        } else {
-            min_level = std::min(min_level, neighbor_level);
+        }
+        
+        if (!found_unprocessed) {
+            // All neighbors processed - do postprocessing and pop
+            stack_size--;
+            
+            if (stack_size > 0) {
+                auto& parent = stack[stack_size - 1];
+                parent.target_found = parent.target_found || frame.target_found;
+                parent.min_level = std::min(parent.min_level, frame.min_level);
+                
+                // Check bridge condition
+                if (frame.target_found && frame.min_level > parent.level) {
+                    Direction dir = kDirections[parent.dir_index - 1];
+                    bridges.insert({parent.cell, dir});
+                }
+            }
         }
     }
-
-    return {target_found, min_level};
 }
 
 std::vector<Wall> Board::legal_walls() const {
     std::set<Wall> illegal_walls;
     std::vector<int> levels(m_columns * m_rows, -1);
-
-    find_bridges(m_blue.position, m_blue.goal, 1, levels, illegal_walls);
+    std::vector<StackFrame> stack(m_columns * m_rows);
+    find_bridges(m_blue.position, m_blue.goal, levels, illegal_walls, stack);
     ranges::fill(levels, -1);
-    find_bridges(m_red.position, m_red.goal, 1, levels, illegal_walls);
+    find_bridges(m_red.position, m_red.goal, levels, illegal_walls, stack);
 
     std::vector<Wall> result;
 
