@@ -6,11 +6,31 @@ namespace GUI {
 BoardRenderer::BoardRenderer(sf::RenderWindow& window, const LayoutDimensions& layout)
     : m_window(window), m_layout(layout) {
     
-    // Try to load a default font - for now we'll handle missing font gracefully
-    if (!m_font.loadFromFile("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")) {
-        // If system font doesn't load, we'll render without text for now
-        std::cerr << "Warning: Could not load font, text will not be displayed\n";
+    if (!loadBundledFont()) {
+        std::cerr << "Warning: GUI will run without text display due to font loading failure.\n";
     }
+}
+
+bool BoardRenderer::loadBundledFont() {
+    // Try different paths since executable might run from build/ directory
+    std::vector<std::string> font_paths = {
+        "../assets/gui/fonts/DejaVuSans.ttf"    // From build/ directory
+        "assets/gui/fonts/DejaVuSans.ttf",      // From project root
+    };
+    
+    for (const auto& path : font_paths) {
+        if (m_font.loadFromFile(path)) {
+            std::cout << "Loaded bundled font: " << path << std::endl;
+            return true;
+        }
+    }
+    
+    std::cerr << "Error: Could not load bundled font from any of these paths:" << std::endl;
+    for (const auto& path : font_paths) {
+        std::cerr << "  - " << path << std::endl;
+    }
+    std::cerr << "Text will not be displayed in the GUI." << std::endl;
+    return false;
 }
 
 void BoardRenderer::render(const Board& board, Player current_player, int actions_left,
@@ -191,7 +211,9 @@ void BoardRenderer::drawPlayer(const Cell& position, const sf::Color& color, int
     float ellipse_left = cell_pos.x + (m_layout.cell_width - ellipse_width) / 2 + offset_x;
     float ellipse_top = cell_pos.y + (m_layout.cell_height - ellipse_height) / 2 + offset_y;
     
-    sf::CircleShape player(ellipse_width / 2);
+    // Use ellipse that matches cell proportions instead of fixed circle
+    sf::CircleShape player(ellipse_height / 2);  // Use height as radius
+    player.setScale(ellipse_width / ellipse_height, 1.0f);  // Scale to make it elliptical
     player.setPosition(ellipse_left, ellipse_top);
     player.setFillColor(color);
     player.setOutlineColor(GUI::BLACK);
@@ -405,3 +427,4 @@ void BoardRenderer::drawAIThinkingIndicator() {
 }
 
 } // namespace GUI 
+

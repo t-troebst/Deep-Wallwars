@@ -1,5 +1,6 @@
 #include "game_gui.hpp"
 #include <folly/logging/xlog.h>
+#include <folly/experimental/coro/BlockingWait.h>
 #include <iostream>
 #include <cstdlib>
 #include <SFML/System.hpp>
@@ -87,6 +88,7 @@ folly::coro::Task<GameRecorder> GameGUI::run_interactive_game(Board board, Evalu
     render(mcts.current_board());
     m_window.display();
     
+    // Main rendering loop - stays on main thread
     while (m_window.isOpen() && !m_game_over) {
         // Handle events (always process events for responsiveness)
         if (!processEvents(mcts.current_board(), mcts, recorder)) {
@@ -99,18 +101,16 @@ folly::coro::Task<GameRecorder> GameGUI::run_interactive_game(Board board, Evalu
             break;
         }
         
-        // AI turn logic - process in smaller chunks for responsiveness
-        if (!m_is_human_turn && !m_game_over && !m_ai_thinking) {
-            m_ai_thinking = true;
-            co_await processAITurn(mcts, opts.samples, recorder);
-            m_ai_thinking = false;
+        // AI turn logic
+        if (!m_is_human_turn && !m_game_over) {
+            processAITurn(mcts, opts.samples, recorder);
             if (!m_game_over) {
                 m_is_human_turn = true;
                 m_actions_left = 2;
             }
         }
         
-        // Render everything
+        // Render everything - always on main thread
         if (m_ai_thinking) {
             m_renderer->renderWithAIThinking(mcts.current_board(), getCurrentPlayer(), m_actions_left,
                                            m_highlight_type, m_highlight_row, m_highlight_col);
@@ -118,9 +118,6 @@ folly::coro::Task<GameRecorder> GameGUI::run_interactive_game(Board board, Evalu
             render(mcts.current_board());
         }
         m_window.display();
-        
-        // Small sleep to prevent busy waiting
-        sf::sleep(sf::milliseconds(16)); // ~60 FPS
     }
     
     // Safe JSON serialization with error handling
@@ -143,17 +140,13 @@ bool GameGUI::processEvents(const Board& board, MCTS& mcts, GameRecorder& record
             case sf::Event::MouseButtonPressed:
                 if (event.mouseButton.button == sf::Mouse::Left) {
                     sf::Vector2i mouse_pos(event.mouseButton.x, event.mouseButton.y);
-                    // We need a non-const reference for mouse clicks, so we'll get it from mcts
-                    Board& mutable_board = const_cast<Board&>(mcts.current_board());
-                    handleMouseClick(mouse_pos, mutable_board, mcts, recorder);
+                    handleMouseClick(mouse_pos, board, mcts, recorder);
                 }
                 break;
                 
             case sf::Event::KeyPressed:
                 {
-                    // We need a non-const reference for key presses, so we'll get it from mcts  
-                    Board& mutable_board = const_cast<Board&>(mcts.current_board());
-                    handleKeyPress(event.key.code, mutable_board, mcts, recorder);
+                    handleKeyPress(event.key.code, board, mcts, recorder);
                 }
                 break;
                 
@@ -175,7 +168,7 @@ bool GameGUI::processEvents(const Board& board, MCTS& mcts, GameRecorder& record
     return true;
 }
 
-void GameGUI::handleMouseClick(sf::Vector2i mouse_pos, Board& board, MCTS& mcts, GameRecorder& recorder) {
+void GameGUI::handleMouseClick(sf::Vector2i mouse_pos, const Board& board, MCTS& mcts, GameRecorder& recorder) {
     if (m_game_over || !m_is_human_turn) {
         return; // Game over or not human's turn
     }
@@ -244,7 +237,7 @@ void GameGUI::handleMouseClick(sf::Vector2i mouse_pos, Board& board, MCTS& mcts,
     }
 }
 
-void GameGUI::handleKeyPress(sf::Keyboard::Key key, Board& board, MCTS& mcts, GameRecorder& recorder) {
+void GameGUI::handleKeyPress(sf::Keyboard::Key key, const Board& board, MCTS& mcts, GameRecorder& recorder) {
     if (m_game_over) {
         return;
     }
@@ -337,45 +330,36 @@ void GameGUI::render(const Board& board) {
     }
 }
 
-folly::coro::Task<void> GameGUI::processAITurn(MCTS& mcts, int samples, GameRecorder& recorder) {
-    // Deactivate OpenGL context before TensorRT operations to avoid conflicts
-    m_window.setActive(false);
+void GameGUI::processAITurn(MCTS& mcts, int samples, GameRecorder& recorder) {
+    m_ai_thinking = true;
     
-    try {
-        Cell ai_start_cell = mcts.current_board().position(m_ai_player);
-        
-        // Process AI move with TensorRT (OpenGL context is inactive)
-        auto ai_move = co_await mcts.sample_and_commit_to_move(samples);
-        
-        // Reactivate OpenGL context for rendering
-        m_window.setActive(true);
-        
-        if (ai_move) {
-            recorder.record_move(m_ai_player, *ai_move);
-            
-            // Safe logging with error handling
-            try {
-                XLOGF(INFO, "AI played: {}", ai_move->standard_notation(ai_start_cell));
-            } catch (const std::exception& e) {
-                XLOGF(WARN, "AI played a move but couldn't convert to standard notation: {}", e.what());
-            }
-            
-            checkGameOver(mcts.current_board(), recorder);
-        } else {
-            // AI has no moves, human wins
-            XLOGF(INFO, "AI has no legal moves, human wins");
-            recorder.record_winner(winner_from_player(m_human_player));
-            m_game_over = true;
-        }
-    } catch (const std::exception& e) {
-        // Ensure OpenGL context is reactivated even on error
-        m_window.setActive(true);
-        
-        XLOGF(ERR, "AI computation failed: {}", e.what());
-        // Treat as AI having no moves
+    // Use the existing sample_and_commit_to_move method which handles the complete move properly
+    Cell ai_start_cell = mcts.current_board().position(m_ai_player);
+    
+    // Use blockingWait to get the AI move while staying on main thread
+    auto ai_move = folly::coro::blockingWait(mcts.sample_and_commit_to_move(samples));
+    
+    if (!ai_move) {
+        // AI has no moves, human wins
+        XLOGF(INFO, "AI has no legal moves, human wins");
         recorder.record_winner(winner_from_player(m_human_player));
         m_game_over = true;
+        m_ai_thinking = false;
+        return;
     }
+    
+    // Record the move
+    recorder.record_move(m_ai_player, *ai_move);
+    
+    // Safe logging with error handling
+    try {
+        XLOGF(INFO, "AI played: {}", ai_move->standard_notation(ai_start_cell));
+    } catch (const std::exception& e) {
+        XLOGF(WARN, "AI played a move but couldn't convert to standard notation: {}", e.what());
+    }
+    
+    checkGameOver(mcts.current_board(), recorder);
+    m_ai_thinking = false;
 }
 
 // Standalone GUI function for interactive play

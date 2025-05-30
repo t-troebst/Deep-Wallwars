@@ -7,6 +7,7 @@
 #include "../mcts.hpp"
 #include "../play.hpp"
 #include "gui_constants.hpp"
+#include "gui_utils.hpp"
 #include "board_renderer.hpp"
 #include "input_handler.hpp"
 
@@ -48,11 +49,11 @@ private:
     
     // Event processing
     bool processEvents(const Board& board, MCTS& mcts, GameRecorder& recorder);
-    void handleMouseClick(sf::Vector2i mouse_pos, Board& board, MCTS& mcts, GameRecorder& recorder);
-    void handleKeyPress(sf::Keyboard::Key key, Board& board, MCTS& mcts, GameRecorder& recorder);
+    void handleMouseClick(sf::Vector2i mouse_pos, const Board& board, MCTS& mcts, GameRecorder& recorder);
+    void handleKeyPress(sf::Keyboard::Key key, const Board& board, MCTS& mcts, GameRecorder& recorder);
     
     // AI computation helpers
-    folly::coro::Task<void> processAITurn(MCTS& mcts, int samples, GameRecorder& recorder);
+    void processAITurn(MCTS& mcts, int samples, GameRecorder& recorder);
     
     // Game logic helpers
     void advanceAction();
