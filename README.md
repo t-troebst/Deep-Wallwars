@@ -62,6 +62,7 @@ Required:
 
 Optional:
 * Catch2 v3 (for unit tests)
+* SFML (for GUI)
 
 ## Dependencies (Python)
 
