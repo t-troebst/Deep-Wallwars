@@ -561,28 +561,9 @@ void Board::fill_relative_distances(Cell start, std::span<float> dists) const {
         throw std::runtime_error("dists size does not match!");
     }
 
+    std::vector<std::pair<Cell, int>> queue_vec;
     std::ranges::fill(dists, 1.0f);
-
-    std::deque<std::pair<Cell, int>> queue = {{start, 0}};
-
-    while (!queue.empty()) {
-        auto const [top, dist] = queue.front();
-        queue.pop_front();
-
-        dists[index_from_cell(top)] = float(dist) / (m_columns * m_rows);
-
-        for (Direction dir : kDirections) {
-            if (is_blocked({top, dir})) {
-                continue;
-            }
-
-            Cell const neighbor = top.step(dir);
-
-            if (dists[index_from_cell(neighbor)] == 1.0f) {
-                queue.push_back({neighbor, dist + 1});
-            }
-        }
-    }
+    fill_relative_distances(start, dists, blocked_directions(), queue_vec);
 }
 
 std::vector<std::array<bool, 4>> Board::blocked_directions() const {
@@ -600,32 +581,37 @@ std::vector<std::array<bool, 4>> Board::blocked_directions() const {
 }
 
 void Board::fill_relative_distances(Cell start, std::span<float> dists,
-                                    std::vector<std::array<bool, 4>> const& blocked_dirs) const {
-    if (int(dists.size()) != m_columns * m_rows) {
-        throw std::runtime_error("dists size does not match!");
+                                    std::vector<std::array<bool, 4>> const& blocked_dirs,
+                                    std::vector<std::pair<Cell, int>>& queue_vec) const {
+    int const board_size = m_columns * m_rows;
+    if (int(dists.size()) != board_size) {
+        throw std::runtime_error("dists size does not match board size!");
     }
 
-    std::ranges::fill(dists, 1.0f);
+    float const scaling_factor = 1.0f / board_size;
 
-    std::deque<std::pair<Cell, int>> queue = {{start, 0}};
+    queue_vec.clear();
+    queue_vec.reserve(static_cast<size_t>(board_size));
 
-    while (!queue.empty()) {
-        auto const [top, dist] = queue.front();
-        queue.pop_front();
+    dists[index_from_cell(start)] = 0.0f;
+    queue_vec.push_back({start, 0});
 
-        int i = index_from_cell(top);
-
-        dists[i] = float(dist) / (m_columns * m_rows);
+    size_t queue_head = 0;
+    while (queue_head < queue_vec.size()) {
+        auto const [top, dist] = queue_vec[queue_head++];
+        int top_index = index_from_cell(top);
 
         for (Direction dir : kDirections) {
-            if (blocked_dirs[i][int(dir)]) {
+            if (blocked_dirs[top_index][int(dir)]) {
                 continue;
             }
 
             Cell const neighbor = top.step(dir);
+            int neighbor_index = index_from_cell(neighbor);
 
-            if (dists[index_from_cell(neighbor)] == 1.0f) {
-                queue.push_back({neighbor, dist + 1});
+            if (dists[neighbor_index] == 1.0f) {
+                queue_vec.push_back({neighbor, dist + 1});
+                dists[neighbor_index] = (dist + 1) * scaling_factor;
             }
         }
     }

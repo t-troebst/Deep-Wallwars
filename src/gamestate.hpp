@@ -136,11 +136,19 @@ public:
     Cell goal(Player player) const;
 
     int distance(Cell start, Cell target) const;
+
+    // Computes relative distances from a given start cell to all other cells on the board.
+    // Distances are normalized to be between 0 and 1.
     void fill_relative_distances(Cell start, std::span<float> dists) const;
 
     std::vector<std::array<bool, 4>> blocked_directions() const;
+
+    // Optimized version of filL_relative_distances, expects to be given pre-computed blocked
+    // directions (see function above), space to keep its internal queue for the BFS (can be empty),
+    // and expects distances to already start out initialized to 1.0f.
     void fill_relative_distances(Cell start, std::span<float> dists,
-                                 std::vector<std::array<bool, 4>> const& blocked_dirs) const;
+                                 std::vector<std::array<bool, 4>> const& blocked_dirs,
+                                 std::vector<std::pair<Cell, int>>& queue_vec) const;
 
     int columns() const;
     int rows() const;
@@ -191,7 +199,7 @@ private:
     };
 
     void find_bridges(Cell start, Cell target, std::vector<int>& levels, std::set<Wall>& bridges,
-                                         std::vector<StackFrame>& stack) const;
+                      std::vector<StackFrame>& stack) const;
 };
 
 namespace std {
