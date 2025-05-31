@@ -16,12 +16,12 @@ public:
                 ElementType highlight_type = ElementType::NONE, int highlight_row = -1, int highlight_col = -1);
     
     // Render with AI thinking indicator
-    void renderWithAIThinking(const Board& board, Player current_player, int actions_left, 
+    void render_with_ai_thinking(const Board& board, Player current_player, int actions_left, 
                               ElementType highlight_type = ElementType::NONE, int highlight_row = -1, int highlight_col = -1);
     
     // Set highlighting for interactive feedback
-    void setHighlight(ElementType type, int row, int col);
-    void clearHighlight();
+    void set_highlight(ElementType type, int row, int col);
+    void clear_highlight();
     
 private:
     sf::RenderWindow& m_window;
@@ -34,41 +34,41 @@ private:
     int m_highlight_col = -1;
     
     // Drawing functions (ports from Python code)
-    void drawBoard();
-    void drawBoardPerimeter();
-    void drawCells();
-    void drawCorners();
-    void drawWallShadows();
+    void draw_board();
+    void draw_board_perimeter();
+    void draw_cells();
+    void draw_corners();
+    void draw_wall_shadows();
     
-    void drawWalls(const Board& board);
-    void drawPlayers(const Board& board);
-    void drawGoals(const Board& board);
-    void drawGameInfo(const Board& board, Player current_player, int actions_left);
-    void drawReachableCells(const Board& board, Player current_player, int actions_left);
-    void drawAIThinkingIndicator();
+    void draw_walls(const Board& board);
+    void draw_players(const Board& board);
+    void draw_goals(const Board& board);
+    void draw_game_info(const Board& board, Player current_player, int actions_left);
+    void draw_reachable_cells(const Board& board, Player current_player, int actions_left);
+    void draw_ai_thinking_indicator();
     
     // Individual drawing primitives
-    void drawCell(int row, int col, const sf::Color& color);
-    void drawHWall(int row, int col, const sf::Color& color);
-    void drawVWall(int row, int col, const sf::Color& color);
-    void drawPlayer(const Cell& position, const sf::Color& color, int offset_x = 0, int offset_y = 0);
-    void drawEmptyRect(const sf::Color& color, float left, float top, float right, float bottom, 
+    void draw_cell(int row, int col, const sf::Color& color);
+    void draw_hwall(int row, int col, const sf::Color& color);
+    void draw_vwall(int row, int col, const sf::Color& color);
+    void draw_player(const Cell& position, const sf::Color& color, int offset_x = 0, int offset_y = 0);
+    void draw_empty_rect(const sf::Color& color, float left, float top, float right, float bottom, 
                        float width, float height);
     
     // Highlighting functions
-    void highlightCell(int row, int col);
-    void highlightVWall(int row, int col);
-    void highlightHWall(int row, int col);
+    void highlight_cell(int row, int col);
+    void highlight_vwall(int row, int col);
+    void highlight_hwall(int row, int col);
     
     // Text rendering
-    void writeText(const std::string& text, float left, float top, const sf::Color& color = GUI::BLACK);
+    void write_text(const std::string& text, float left, float top, const sf::Color& color = GUI::BLACK);
     
     // Helper functions
-    std::vector<Cell> getCellsAtDistance1(const Board& board, Player player);
-    std::vector<Cell> getCellsAtDistance2(const Board& board, Player player);
+    std::vector<Cell> get_cells_at_distance1(const Board& board, Player player);
+    std::vector<Cell> get_cells_at_distance2(const Board& board, Player player);
     
     // Font loading helper
-    bool loadBundledFont();
+    bool load_bundled_font();
 };
 
 } // namespace GUI 

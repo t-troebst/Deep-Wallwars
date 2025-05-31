@@ -5,7 +5,7 @@ namespace GUI {
 
 InputHandler::InputHandler(const LayoutDimensions& layout) : m_layout(layout) {}
 
-std::tuple<ElementType, int, int> InputHandler::getElementAtPosition(sf::Vector2i mouse_pos) const {
+std::tuple<ElementType, int, int> InputHandler::get_element_at_position(sf::Vector2i mouse_pos) const {
     // Direct port from Python elemAtCoords function
     int x = mouse_pos.x - (m_layout.margin_width + m_layout.perimeter_width);
     int y = mouse_pos.y - (m_layout.margin_height + m_layout.perimeter_height);
@@ -31,7 +31,7 @@ std::tuple<ElementType, int, int> InputHandler::getElementAtPosition(sf::Vector2
     return {ElementType::CORNER, row, col};
 }
 
-bool InputHandler::isCellReachableIn1Action(const Board& board, Player player, Cell target) const {
+bool InputHandler::is_cell_reachable_in_1_action(const Board& board, Player player, Cell target) const {
     auto legal_dirs = board.legal_directions(player);
     Cell current_pos = board.position(player);
     
@@ -43,7 +43,7 @@ bool InputHandler::isCellReachableIn1Action(const Board& board, Player player, C
     return false;
 }
 
-bool InputHandler::isCellReachableIn2Actions(const Board& board, Player player, Cell target) const {
+bool InputHandler::is_cell_reachable_in_2_actions(const Board& board, Player player, Cell target) const {
     auto legal_dirs = board.legal_directions(player);
     Cell current_pos = board.position(player);
     
@@ -65,16 +65,16 @@ bool InputHandler::isCellReachableIn2Actions(const Board& board, Player player, 
     return false;
 }
 
-InputHandler::MouseAction InputHandler::handleMouseClick(sf::Vector2i mouse_pos, const Board& board, Player current_player) const {
-    auto [element_type, row, col] = getElementAtPosition(mouse_pos);
+InputHandler::MouseAction InputHandler::handle_mouse_click(sf::Vector2i mouse_pos, const Board& board, Player current_player) const {
+    auto [element_type, row, col] = get_element_at_position(mouse_pos);
     
     switch (element_type) {
         case ElementType::CELL: {
             Cell target{col, row};  // Note: Python uses (row, col), C++ Board uses (col, row)
             
             // Check if target is reachable (similar to Python moveAction logic)
-            if (isCellReachableIn1Action(board, current_player, target) ||
-                isCellReachableIn2Actions(board, current_player, target)) {
+            if (is_cell_reachable_in_1_action(board, current_player, target) ||
+                is_cell_reachable_in_2_actions(board, current_player, target)) {
                 return {InputHandler::MouseAction::MOVE_TO_CELL, target, {}};
             }
             break;
@@ -123,7 +123,7 @@ InputHandler::MouseAction InputHandler::handleMouseClick(sf::Vector2i mouse_pos,
     return {InputHandler::MouseAction::NONE, {}, {}};
 }
 
-std::optional<Direction> InputHandler::handleKeyPress(sf::Keyboard::Key key) const {
+std::optional<Direction> InputHandler::handle_key_press(sf::Keyboard::Key key) const {
     // Map keyboard input to directions (from Python keyboard handling)
     switch (key) {
         case sf::Keyboard::Left:

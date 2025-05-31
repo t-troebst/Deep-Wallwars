@@ -62,7 +62,7 @@ GameGUI::GameGUI(int window_width, int window_height, int board_cols, int board_
     m_ai_player = Player::Blue;
 }
 
-bool GameGUI::askHumanGoesFirst() {
+bool GameGUI::ask_human_goes_first() {
     std::cout << "Do you want to go first? (y/n): ";
     char first;
     std::cin >> first;
@@ -91,19 +91,19 @@ folly::coro::Task<GameRecorder> GameGUI::run_interactive_game(Board board, Evalu
     // Main rendering loop - stays on main thread
     while (m_window.isOpen() && !m_game_over) {
         // Handle events (always process events for responsiveness)
-        if (!processEvents(mcts.current_board(), mcts, recorder)) {
+        if (!process_events(mcts.current_board(), mcts, recorder)) {
             break; // Window closed
         }
         
         // Check for game over
-        checkGameOver(mcts.current_board(), recorder);
+        check_game_over(mcts.current_board(), recorder);
         if (m_game_over) {
             break;
         }
         
         // AI turn logic
         if (!m_is_human_turn && !m_game_over) {
-            processAITurn(mcts, opts.samples, recorder);
+            process_ai_turn(mcts, opts.samples, recorder);
             if (!m_game_over) {
                 m_is_human_turn = true;
                 m_actions_left = 2;
@@ -112,7 +112,7 @@ folly::coro::Task<GameRecorder> GameGUI::run_interactive_game(Board board, Evalu
         
         // Render everything - always on main thread
         if (m_ai_thinking) {
-            m_renderer->renderWithAIThinking(mcts.current_board(), getCurrentPlayer(), m_actions_left,
+            m_renderer->render_with_ai_thinking(mcts.current_board(), get_current_player(), m_actions_left,
                                            m_highlight_type, m_highlight_row, m_highlight_col);
         } else {
             render(mcts.current_board());
@@ -129,7 +129,7 @@ folly::coro::Task<GameRecorder> GameGUI::run_interactive_game(Board board, Evalu
     co_return recorder;
 }
 
-bool GameGUI::processEvents(const Board& board, MCTS& mcts, GameRecorder& recorder) {
+bool GameGUI::process_events(const Board& board, MCTS& mcts, GameRecorder& recorder) {
     sf::Event event;
     while (m_window.pollEvent(event)) {
         switch (event.type) {
@@ -140,13 +140,13 @@ bool GameGUI::processEvents(const Board& board, MCTS& mcts, GameRecorder& record
             case sf::Event::MouseButtonPressed:
                 if (event.mouseButton.button == sf::Mouse::Left) {
                     sf::Vector2i mouse_pos(event.mouseButton.x, event.mouseButton.y);
-                    handleMouseClick(mouse_pos, board, mcts, recorder);
+                    handle_mouse_click(mouse_pos, board, mcts, recorder);
                 }
                 break;
                 
             case sf::Event::KeyPressed:
                 {
-                    handleKeyPress(event.key.code, board, mcts, recorder);
+                    handle_key_press(event.key.code, board, mcts, recorder);
                 }
                 break;
                 
@@ -154,7 +154,7 @@ bool GameGUI::processEvents(const Board& board, MCTS& mcts, GameRecorder& record
                 {
                     // Update highlighting
                     sf::Vector2i mouse_pos(event.mouseMove.x, event.mouseMove.y);
-                    auto [element_type, row, col] = m_input_handler.getElementAtPosition(mouse_pos);
+                    auto [element_type, row, col] = m_input_handler.get_element_at_position(mouse_pos);
                     m_highlight_type = element_type;
                     m_highlight_row = row;
                     m_highlight_col = col;
@@ -168,12 +168,12 @@ bool GameGUI::processEvents(const Board& board, MCTS& mcts, GameRecorder& record
     return true;
 }
 
-void GameGUI::handleMouseClick(sf::Vector2i mouse_pos, const Board& board, MCTS& mcts, GameRecorder& recorder) {
+void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, const Board& board, MCTS& mcts, GameRecorder& recorder) {
     if (m_game_over || !m_is_human_turn) {
         return; // Game over or not human's turn
     }
     
-    auto action = m_input_handler.handleMouseClick(mouse_pos, board, m_human_player);
+    auto action = m_input_handler.handle_mouse_click(mouse_pos, board, m_human_player);
     
     switch (action.type) {
         case InputHandler::MouseAction::MOVE_TO_CELL: {
@@ -181,14 +181,14 @@ void GameGUI::handleMouseClick(sf::Vector2i mouse_pos, const Board& board, MCTS&
             Cell current_pos = board.position(m_human_player);
             Cell target = action.target_cell;
             
-            if (m_input_handler.isCellReachableIn1Action(board, m_human_player, target)) {
+            if (m_input_handler.is_cell_reachable_in_1_action(board, m_human_player, target)) {
                 // Find the direction
                 auto dirs = board.legal_directions(m_human_player);
                 for (Direction dir : dirs) {
                     if (current_pos.step(dir) == target) {
                         mcts.force_action(dir);
                         m_human_actions.push_back(dir);  // Store for move recording
-                        advanceAction();
+                        advance_action();
                         // Check if we completed a full move (2 actions)
                         if (m_actions_left == 2) {
                             // Record the complete human move
@@ -214,7 +214,7 @@ void GameGUI::handleMouseClick(sf::Vector2i mouse_pos, const Board& board, MCTS&
             Wall wall = action.target_wall;
             mcts.force_action(wall);
             m_human_actions.push_back(wall);  // Store for move recording
-            advanceAction();
+            advance_action();
             // Check if we completed a full move (2 actions)
             if (m_actions_left == 2) {
                 // Record the complete human move
@@ -237,7 +237,7 @@ void GameGUI::handleMouseClick(sf::Vector2i mouse_pos, const Board& board, MCTS&
     }
 }
 
-void GameGUI::handleKeyPress(sf::Keyboard::Key key, const Board& board, MCTS& mcts, GameRecorder& recorder) {
+void GameGUI::handle_key_press(sf::Keyboard::Key key, const Board& board, MCTS& mcts, GameRecorder& recorder) {
     if (m_game_over) {
         return;
     }
@@ -251,7 +251,7 @@ void GameGUI::handleKeyPress(sf::Keyboard::Key key, const Board& board, MCTS& mc
         return; // Not human's turn
     }
     
-    auto direction = m_input_handler.handleKeyPress(key);
+    auto direction = m_input_handler.handle_key_press(key);
     if (direction) {
         // Check if move is legal
         auto legal_dirs = board.legal_directions(m_human_player);
@@ -259,7 +259,7 @@ void GameGUI::handleKeyPress(sf::Keyboard::Key key, const Board& board, MCTS& mc
             if (dir == *direction) {
                 mcts.force_action(dir);
                 m_human_actions.push_back(dir);  // Store for move recording
-                advanceAction();
+                advance_action();
                 // Check if we completed a full move (2 actions)
                 if (m_actions_left == 2) {
                     // Record the complete human move
@@ -280,7 +280,7 @@ void GameGUI::handleKeyPress(sf::Keyboard::Key key, const Board& board, MCTS& mc
     }
 }
 
-void GameGUI::advanceAction() {
+void GameGUI::advance_action() {
     m_actions_left--;
     // Note: The actual turn management is handled by MCTS
     // We just track actions left for display purposes
@@ -289,7 +289,7 @@ void GameGUI::advanceAction() {
     }
 }
 
-void GameGUI::checkGameOver(const Board& board, GameRecorder& recorder) {
+void GameGUI::check_game_over(const Board& board, GameRecorder& recorder) {
     Winner winner = board.winner();
     if (winner != Winner::Undecided) {
         recorder.record_winner(winner);
@@ -314,23 +314,23 @@ void GameGUI::checkGameOver(const Board& board, GameRecorder& recorder) {
     }
 }
 
-Player GameGUI::getCurrentPlayer() const {
+Player GameGUI::get_current_player() const {
     return m_is_human_turn ? m_human_player : m_ai_player;
 }
 
 void GameGUI::render(const Board& board) {
     if (!m_is_human_turn && !m_game_over) {
         // Show AI thinking indicator
-        m_renderer->renderWithAIThinking(board, getCurrentPlayer(), m_actions_left, 
+        m_renderer->render_with_ai_thinking(board, get_current_player(), m_actions_left, 
                                        m_highlight_type, m_highlight_row, m_highlight_col);
     } else {
         // Normal rendering
-        m_renderer->render(board, getCurrentPlayer(), m_actions_left, 
+        m_renderer->render(board, get_current_player(), m_actions_left, 
                          m_highlight_type, m_highlight_row, m_highlight_col);
     }
 }
 
-void GameGUI::processAITurn(MCTS& mcts, int samples, GameRecorder& recorder) {
+void GameGUI::process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder) {
     m_ai_thinking = true;
     
     // Use the existing sample_and_commit_to_move method which handles the complete move properly
@@ -358,14 +358,14 @@ void GameGUI::processAITurn(MCTS& mcts, int samples, GameRecorder& recorder) {
         XLOGF(WARN, "AI played a move but couldn't convert to standard notation: {}", e.what());
     }
     
-    checkGameOver(mcts.current_board(), recorder);
+    check_game_over(mcts.current_board(), recorder);
     m_ai_thinking = false;
 }
 
 // Standalone GUI function for interactive play
 folly::coro::Task<GameRecorder> interactive_play_gui(Board board, InteractivePlayOptions opts) {
     // Ask for player choice before creating GUI window
-    bool human_goes_first = GameGUI::askHumanGoesFirst();
+    bool human_goes_first = GameGUI::ask_human_goes_first();
     
     // Limit parallelism for GUI mode to prevent threading issues
     int safe_parallelism = std::min(opts.max_parallel_samples, 4);

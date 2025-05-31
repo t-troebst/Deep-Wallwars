@@ -20,17 +20,17 @@ public:
     InputHandler(const LayoutDimensions& layout);
     
     // Handle mouse click and return the appropriate action
-    MouseAction handleMouseClick(sf::Vector2i mouse_pos, const Board& board, Player current_player) const;
+    MouseAction handle_mouse_click(sf::Vector2i mouse_pos, const Board& board, Player current_player) const;
     
     // Handle keyboard input for movement
-    std::optional<Direction> handleKeyPress(sf::Keyboard::Key key) const;
+    std::optional<Direction> handle_key_press(sf::Keyboard::Key key) const;
     
     // Get the highlighted element under mouse cursor
-    std::tuple<ElementType, int, int> getElementAtPosition(sf::Vector2i mouse_pos) const;
+    std::tuple<ElementType, int, int> get_element_at_position(sf::Vector2i mouse_pos) const;
     
     // Check if a cell is reachable by the current player
-    bool isCellReachableIn1Action(const Board& board, Player player, Cell target) const;
-    bool isCellReachableIn2Actions(const Board& board, Player player, Cell target) const;
+    bool is_cell_reachable_in_1_action(const Board& board, Player player, Cell target) const;
+    bool is_cell_reachable_in_2_actions(const Board& board, Player player, Cell target) const;
     
 private:
     const LayoutDimensions& m_layout;

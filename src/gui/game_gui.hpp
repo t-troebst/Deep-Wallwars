@@ -21,10 +21,10 @@ public:
             int board_rows = GUI::DEFAULT_BOARD_ROWS);
     
     // Static helper to get player choice before GUI creation
-    static bool askHumanGoesFirst();
+    static bool ask_human_goes_first();
     
     // Static utility to check X11 display status
-    static bool checkDisplayConnection();
+    static bool check_display_connection();
     
     // Main function to run interactive game with GUI
     folly::coro::Task<GameRecorder> run_interactive_game(Board board, EvaluationFunction ai_model, InteractivePlayOptions opts, bool human_goes_first);
@@ -48,17 +48,17 @@ private:
     bool m_ai_thinking = false;
     
     // Event processing
-    bool processEvents(const Board& board, MCTS& mcts, GameRecorder& recorder);
-    void handleMouseClick(sf::Vector2i mouse_pos, const Board& board, MCTS& mcts, GameRecorder& recorder);
-    void handleKeyPress(sf::Keyboard::Key key, const Board& board, MCTS& mcts, GameRecorder& recorder);
+    bool process_events(const Board& board, MCTS& mcts, GameRecorder& recorder);
+    void handle_mouse_click(sf::Vector2i mouse_pos, const Board& board, MCTS& mcts, GameRecorder& recorder);
+    void handle_key_press(sf::Keyboard::Key key, const Board& board, MCTS& mcts, GameRecorder& recorder);
     
     // AI computation helpers
-    void processAITurn(MCTS& mcts, int samples, GameRecorder& recorder);
+    void process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder);
     
     // Game logic helpers
-    void advanceAction();
-    void checkGameOver(const Board& board, GameRecorder& recorder);
-    Player getCurrentPlayer() const;
+    void advance_action();
+    void check_game_over(const Board& board, GameRecorder& recorder);
+    Player get_current_player() const;
     
     // Rendering
     void render(const Board& board);

@@ -34,14 +34,14 @@ struct LayoutDimensions {
     LayoutDimensions(int window_w, int window_h, int cols, int rows);
     
     // Coordinate conversion methods
-    sf::Vector2f cellPosToCoords(int row, int col) const;
-    sf::Vector2f cornerPosToCoords(int row, int col) const;
-    sf::Vector2f hWallPosToCoords(int row, int col) const;
-    sf::Vector2f vWallPosToCoords(int row, int col) const;
+    sf::Vector2f cell_pos_to_coords(int row, int col) const;
+    sf::Vector2f corner_pos_to_coords(int row, int col) const;
+    sf::Vector2f hwall_pos_to_coords(int row, int col) const;
+    sf::Vector2f vwall_pos_to_coords(int row, int col) const;
 };
 
 // Helper function to increment color with bounds checking
-sf::Color incrementColor(const sf::Color& color, int increment);
+sf::Color increment_color(const sf::Color& color, int increment);
 
 // Element types for mouse interaction
 enum class ElementType {

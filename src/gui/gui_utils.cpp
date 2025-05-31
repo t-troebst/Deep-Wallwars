@@ -33,29 +33,28 @@ LayoutDimensions::LayoutDimensions(int window_w, int window_h, int cols, int row
     shared_cell_offset_height = cell_height / 7;
 }
 
-sf::Vector2f LayoutDimensions::cellPosToCoords(int row, int col) const {
+sf::Vector2f LayoutDimensions::cell_pos_to_coords(int row, int col) const {
     float left = margin_width + perimeter_width + cell_plus_wall_width * col;
     float top = margin_height + perimeter_height + cell_plus_wall_height * row;
     return sf::Vector2f(left, top);
 }
 
-sf::Vector2f LayoutDimensions::cornerPosToCoords(int row, int col) const {
-    auto cell_pos = cellPosToCoords(row, col);
+sf::Vector2f LayoutDimensions::corner_pos_to_coords(int row, int col) const {
+    auto cell_pos = cell_pos_to_coords(row, col);
     return sf::Vector2f(cell_pos.x + cell_width, cell_pos.y + cell_height);
 }
 
-sf::Vector2f LayoutDimensions::hWallPosToCoords(int row, int col) const {
-    auto cell_pos = cellPosToCoords(row, col);
+sf::Vector2f LayoutDimensions::hwall_pos_to_coords(int row, int col) const {
+    auto cell_pos = cell_pos_to_coords(row, col);
     return sf::Vector2f(cell_pos.x, cell_pos.y + cell_height);
 }
 
-sf::Vector2f LayoutDimensions::vWallPosToCoords(int row, int col) const {
-    auto cell_pos = cellPosToCoords(row, col);
+sf::Vector2f LayoutDimensions::vwall_pos_to_coords(int row, int col) const {
+    auto cell_pos = cell_pos_to_coords(row, col);
     return sf::Vector2f(cell_pos.x + cell_width, cell_pos.y);
 }
 
-sf::Color incrementColor(const sf::Color& color, int increment) {
-    // Direct port from Python incrementColor function
+sf::Color increment_color(const sf::Color& color, int increment) {
     int r = std::max(0, std::min(255, static_cast<int>(color.r) + increment));
     int g = std::max(0, std::min(255, static_cast<int>(color.g) + increment));
     int b = std::max(0, std::min(255, static_cast<int>(color.b) + increment));
