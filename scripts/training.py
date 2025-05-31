@@ -152,7 +152,7 @@ def save_model(model, name, device):
 
 
 def load_model(name, device):
-    return torch.load(f"{args.models}/{name}.pt").to(device)
+    return torch.load(f"{args.models}/{name}.pt", weights_only=False).to(device)
 
 
 def run_self_play(model1, model2, generation):
