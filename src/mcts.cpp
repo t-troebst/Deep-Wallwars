@@ -52,8 +52,9 @@ MCTS::MCTS(EvaluationFunction evaluate, Board board, Options options)
 }
 
 folly::coro::Task<float> MCTS::sample(int samples) {
+    auto* executor = co_await folly::coro::co_current_executor;
     auto sample_tasks =
-        views::iota(0, samples) | views::transform([&](int) { return sample_rec(*m_root); });
+        views::iota(0, samples) | views::transform([&](int) { return sample_rec(*m_root).scheduleOn(executor); });
 
     co_await folly::coro::collectAllWindowed(sample_tasks, m_opts.max_parallelism);
 

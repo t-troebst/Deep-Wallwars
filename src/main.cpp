@@ -239,7 +239,8 @@ void ranking(nv::IRuntime& runtime) {
                                                 .max_matchup_distance = FLAGS_rank_last,
                                                 .models_to_rank = FLAGS_models_to_rank,
                                                 .samples = FLAGS_samples,
-                                                .seed = FLAGS_seed}));
+                                                .seed = FLAGS_seed})
+                                      .scheduleOn(&thread_pool));
 
     std::string json = all_to_json(recorders);
     std::ofstream json_file{ranking_folder / "games.json", std::ios_base::app};

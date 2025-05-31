@@ -207,8 +207,9 @@ folly::coro::Task<GameRecorder> evaluation_play_single(const Board& board, int i
 
 folly::coro::Task<std::vector<GameRecorder>> evaluation_play(Board board, int games,
                                                              EvaluationPlayOptions opts) {
+    auto* executor = co_await folly::coro::co_current_executor;
     auto game_tasks = views::iota(1, games + 1) | views::transform([&](int i) {
-                          return evaluation_play_single(board, i, opts);
+                          return evaluation_play_single(board, i, opts).scheduleOn(executor);
                       });
 
     auto results = co_await folly::coro::collectAllWindowed(game_tasks, opts.max_parallel_games);
@@ -217,8 +218,9 @@ folly::coro::Task<std::vector<GameRecorder>> evaluation_play(Board board, int ga
 }
 
 folly::coro::Task<> training_play(Board board, int games, TrainingPlayOptions opts) {
+    auto* executor = co_await folly::coro::co_current_executor;
     auto game_tasks = views::iota(1, games + 1) | views::transform([&](int i) {
-                          return training_play_single(board, opts.model1, opts.model2, i, opts);
+                          return training_play_single(board, opts.model1, opts.model2, i, opts).scheduleOn(executor);
                       });
 
     auto results = co_await folly::coro::collectAllWindowed(game_tasks, opts.max_parallel_games);
@@ -254,6 +256,7 @@ folly::coro::Task<std::vector<GameRecorder>> ranking_play(Board board, int games
     int game_index = 1;
     std::size_t start_model =
         opts.models_to_rank == 0 ? 0 : opts.models.size() - opts.models_to_rank;
+    auto* executor = co_await folly::coro::co_current_executor;
     for (std::size_t i = start_model; i < opts.models.size(); ++i) {
         std::size_t rank_start_model = std::max(static_cast<int>(i) - opts.max_matchup_distance, 0);
 
@@ -267,7 +270,7 @@ folly::coro::Task<std::vector<GameRecorder>> ranking_play(Board board, int games
                                             .seed = opts.seed};
             auto game_tasks =
                 views::iota(0, games_per_matchup) | views::transform([&, game_index](int i) {
-                    return evaluation_play_single(board, game_index + i, eval_opts);
+                    return evaluation_play_single(board, game_index + i, eval_opts).scheduleOn(executor);
                 });
             game_index += games_per_matchup;
             auto matchup_recorders = co_await folly::coro::collectAllWindowed(
