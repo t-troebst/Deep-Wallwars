@@ -7,7 +7,6 @@
 #include <array>
 #include <cassert>
 #include <deque>
-#include <exception>
 #include <format>
 #include <iostream>
 #include <ranges>
