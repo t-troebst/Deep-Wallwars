@@ -72,10 +72,8 @@ EvaluationFunction create_and_validate_model(nv::IRuntime& runtime, std::string 
     }
 
     std::vector<std::unique_ptr<Model>> tensor_rt_models;
-    // More models = more parallelizable work for the scheduler on the GPU so
-    // we can get slightly higher GPU utilization.
-    // For training, we use 3. Probably 2 is enough, but to be safe.
-    int num_models = mode == Mode::Train ? 3 : 1;
+    // Use two models to improve GPU utilization.
+    int num_models = mode == Mode::Train ? 2 : 1;
     for (int i = 0; i < num_models; i++) {
         tensor_rt_models.push_back(std::make_unique<TensorRTModel>(engine));
     }
