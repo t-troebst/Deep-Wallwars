@@ -179,29 +179,26 @@ def run_self_play(model1, model2, generation):
         "-samples",
         str(args.samples),
     ]
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-    )
     
-    # Write output to log file
+    # Open log file in append mode
     with open(args.log, "a") as f:
-        if result.stdout:
-            f.write(result.stdout)
-        if result.stderr:
-            f.write(result.stderr)
+        # Run the process and pipe output directly to the log file
+        process = subprocess.Popen(
+            cmd,
+            stdout=f,
+            stderr=f,
+            text=True,
+            bufsize=1  # Line buffered
+        )
+        
+        # Wait for the process to complete
+        returncode = process.wait()
     
-    if result.returncode != 0:
-        print(f"Error: Self play failed with return code {result.returncode}")
+    if returncode != 0:
+        print(f"Error: Self play failed with return code {returncode}")
         print("Command executed:")
         print(" ".join(cmd))
-        if result.stdout:
-            print("Standard output:")
-            print(result.stdout)
-        if result.stderr:
-            print("Error output:")
-            print(result.stderr)
+        print(f"Check the log file at {args.log} for details")
         exit(1)
 
 
