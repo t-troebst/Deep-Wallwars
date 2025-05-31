@@ -150,6 +150,10 @@ void train(EvaluationFunction const& eval_fn) {
     TrainingDataPrinter training_data_printer(FLAGS_output, 0.5);
 
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
+    
+    XLOGF(INFO, "Created thread pool with {} threads (FLAGS_j = {})", 
+          thread_pool.numThreads(), FLAGS_j);
+    
     folly::coro::blockingWait(training_play(board, FLAGS_games,
                                             {
                                                 .model1 = eval_fn,
