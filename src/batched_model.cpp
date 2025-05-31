@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "cuda_wrappers.hpp"
 #include "model.hpp"
 
 constexpr int kDefaultBatchesInQueue = 16;
@@ -47,9 +48,13 @@ std::size_t BatchedModel::total_batches() const {
 
 void BatchedModel::run_worker(std::size_t idx) {
     std::vector<folly::Promise<ModelOutput>> dequeued_promises;
-    std::vector<float> states(m_models[idx]->batch_size() * m_models[idx]->state_size());
-    std::vector<float> priors(m_models[idx]->batch_size() * (m_models[idx]->wall_prior_size() + 4));
-    std::vector<float> values(m_models[idx]->batch_size());
+
+    // This substantially improves GPU memory transfer times but feels a bit hacky to use
+    // cuda-specific code here...
+    PinnedBuffer<float> states(m_models[idx]->batch_size() * m_models[idx]->state_size());
+    PinnedBuffer<float> priors(m_models[idx]->batch_size() *
+                               (m_models[idx]->wall_prior_size() + 4));
+    PinnedBuffer<float> values(m_models[idx]->batch_size());
 
     while (true) {
         for (int i = 0; i < m_models[idx]->batch_size(); ++i) {
@@ -65,7 +70,7 @@ void BatchedModel::run_worker(std::size_t idx) {
                 return;
             }
 
-            std::ranges::copy(task.state, states.begin() + m_models[idx]->state_size() * i);
+            std::ranges::copy(task.state, states.data() + m_models[idx]->state_size() * i);
             dequeued_promises.push_back(std::move(task.output));
         }
 
@@ -73,8 +78,8 @@ void BatchedModel::run_worker(std::size_t idx) {
 
         for (std::size_t i = 0; i < dequeued_promises.size(); ++i) {
             std::vector<float> prior{
-                priors.begin() + (m_models[idx]->wall_prior_size() + 4) * i,
-                priors.begin() + (m_models[idx]->wall_prior_size() + 4) * (i + 1)};
+                priors.data() + (m_models[idx]->wall_prior_size() + 4) * i,
+                priors.data() + (m_models[idx]->wall_prior_size() + 4) * (i + 1)};
 
             dequeued_promises[i].setValue(ModelOutput{std::move(prior), values[i]});
         }
