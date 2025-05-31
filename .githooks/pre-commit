@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Get all staged .cpp and .hpp files
+files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(cpp|hpp)$')
+
+if [ -z "$files" ]; then
+    echo "No C++ files to format"
+    exit 0
+fi
+
+echo "Running clang-format on staged C++ files..."
+
+# Format each file
+for file in $files; do
+    if [ -f "$file" ]; then
+        echo "Formatting $file"
+        clang-format -i "$file"
+        git add "$file"
+    fi
+done
+
+echo "Formatting complete"
+exit 0 
