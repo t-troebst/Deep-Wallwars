@@ -55,8 +55,6 @@ void TensorRTModel::inference(std::span<float> states, Output const& out) {
 
 std::shared_ptr<nv::ICudaEngine> load_serialized_engine(nv::IRuntime& runtime,
                                                         std::istream& binary_in) {
-    // Yes I should memory map or whatever but this is fine. :)
-
     // Fetch file size first to initialize the vector with the correct size
     binary_in.seekg(0, std::ios::end);
     auto size = binary_in.tellg();
