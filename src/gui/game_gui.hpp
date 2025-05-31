@@ -1,7 +1,7 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
-#include <folly/experimental/coro/Task.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
 #include <memory>
 #include "../gamestate.hpp"
 #include "../mcts.hpp"
@@ -27,13 +27,14 @@ public:
     static bool check_display_connection();
     
     // Main function to run interactive game with GUI
-    folly::coro::Task<GameRecorder> run_interactive_game(Board board, EvaluationFunction ai_model, InteractivePlayOptions opts, bool human_goes_first);
+    GameRecorder run_interactive_game(Board board, EvaluationFunction ai_model, InteractivePlayOptions opts, bool human_goes_first, folly::CPUThreadPoolExecutor& thread_pool);
     
 private:
     sf::RenderWindow m_window;
     LayoutDimensions m_layout;
     std::unique_ptr<BoardRenderer> m_renderer;
     InputHandler m_input_handler;
+    folly::CPUThreadPoolExecutor* m_thread_pool = nullptr;  // Reference to thread pool for AI work
     
     // Game state tracking
     Player m_human_player;
@@ -68,6 +69,6 @@ private:
 };
 
 // Standalone GUI function for interactive play
-folly::coro::Task<GameRecorder> interactive_play_gui(Board board, InteractivePlayOptions opts);
+GameRecorder interactive_play_gui(Board board, InteractivePlayOptions opts, folly::CPUThreadPoolExecutor& thread_pool);
 
 } // namespace GUI 

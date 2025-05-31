@@ -223,8 +223,7 @@ void interactive(EvaluationFunction const& eval_fn) {
     
 #ifdef GUI_ENABLED
     if (FLAGS_gui) {
-        folly::coro::blockingWait(GUI::interactive_play_gui(board, opts)
-                                      .scheduleOn(&thread_pool));
+        GUI::interactive_play_gui(board, opts, thread_pool);
         return;
     }
 #endif

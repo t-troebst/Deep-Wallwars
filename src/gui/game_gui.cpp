@@ -69,7 +69,10 @@ bool GameGUI::ask_human_goes_first() {
     return (first == 'y' || first == 'Y');
 }
 
-folly::coro::Task<GameRecorder> GameGUI::run_interactive_game(Board board, EvaluationFunction ai_model, InteractivePlayOptions opts, bool human_goes_first) {
+GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_model, InteractivePlayOptions opts, bool human_goes_first, folly::CPUThreadPoolExecutor& thread_pool) {
+    // Store thread pool reference for AI work
+    m_thread_pool = &thread_pool;
+    
     m_human_player = human_goes_first ? Player::Red : Player::Blue;
     m_ai_player = other_player(m_human_player);
     
@@ -126,7 +129,7 @@ folly::coro::Task<GameRecorder> GameGUI::run_interactive_game(Board board, Evalu
     } catch (const std::exception& e) {
         XLOGF(ERR, "Failed to serialize game to JSON: {}", e.what());
     }
-    co_return recorder;
+    return recorder;
 }
 
 bool GameGUI::process_events(const Board& board, MCTS& mcts, GameRecorder& recorder) {
@@ -336,8 +339,8 @@ void GameGUI::process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder) {
     // Use the existing sample_and_commit_to_move method which handles the complete move properly
     Cell ai_start_cell = mcts.current_board().position(m_ai_player);
     
-    // Use blockingWait to get the AI move while staying on main thread
-    auto ai_move = folly::coro::blockingWait(mcts.sample_and_commit_to_move(samples));
+    // Schedule AI work on thread pool and use blockingWait to get the result
+    auto ai_move = folly::coro::blockingWait(mcts.sample_and_commit_to_move(samples).scheduleOn(m_thread_pool));
     
     if (!ai_move) {
         // AI has no moves, human wins
@@ -363,7 +366,7 @@ void GameGUI::process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder) {
 }
 
 // Standalone GUI function for interactive play
-folly::coro::Task<GameRecorder> interactive_play_gui(Board board, InteractivePlayOptions opts) {
+GameRecorder interactive_play_gui(Board board, InteractivePlayOptions opts, folly::CPUThreadPoolExecutor& thread_pool) {
     // Ask for player choice before creating GUI window
     bool human_goes_first = GameGUI::ask_human_goes_first();
     
@@ -376,7 +379,7 @@ folly::coro::Task<GameRecorder> interactive_play_gui(Board board, InteractivePla
     
     GameGUI gui(GUI::DEFAULT_WINDOW_WIDTH, GUI::DEFAULT_WINDOW_HEIGHT, 
                 board.columns(), board.rows());
-    co_return co_await gui.run_interactive_game(std::move(board), opts.model, opts, human_goes_first);
+    return gui.run_interactive_game(std::move(board), opts.model, opts, human_goes_first, thread_pool);
 }
 
 } // namespace GUI 
