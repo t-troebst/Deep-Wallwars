@@ -1,16 +1,16 @@
 #include "game_gui.hpp"
-#include <folly/logging/xlog.h>
+
 #include <folly/experimental/coro/BlockingWait.h>
-#include <iostream>
-#include <cstdlib>
+#include <folly/logging/xlog.h>
+
 #include <SFML/System.hpp>
+#include <cstdlib>
+#include <iostream>
 
 namespace GUI {
 
 GameGUI::GameGUI(int window_width, int window_height, int board_cols, int board_rows)
-    : m_layout(window_width, window_height, board_cols, board_rows),
-      m_input_handler(m_layout) {
-    
+    : m_layout(window_width, window_height, board_cols, board_rows), m_input_handler(m_layout) {
     // Create window with minimal OpenGL context and retry logic for WSL2/X11 issues
     sf::ContextSettings settings;
     settings.majorVersion = 2;
@@ -18,12 +18,12 @@ GameGUI::GameGUI(int window_width, int window_height, int board_cols, int board_
     settings.depthBits = 0;
     settings.stencilBits = 0;
     settings.antialiasingLevel = 0;
-    
+
     // Try to create window with retry logic for X11/WSL2 issues
     bool window_created = false;
     int retry_count = 0;
-    const int max_retries = 3;
-    
+    int const max_retries = 3;
+
     while (!window_created && retry_count < max_retries) {
         try {
             if (retry_count > 0) {
@@ -31,10 +31,10 @@ GameGUI::GameGUI(int window_width, int window_height, int board_cols, int board_
                 // Small delay between retries
                 sf::sleep(sf::milliseconds(500));
             }
-            
-            m_window.create(sf::VideoMode(window_width, window_height), "Deep Wallwars", 
-                           sf::Style::Default, settings);
-            
+
+            m_window.create(sf::VideoMode(window_width, window_height), "Deep Wallwars",
+                            sf::Style::Default, settings);
+
             // Test if window was actually created successfully
             if (m_window.isOpen()) {
                 window_created = true;
@@ -42,22 +42,24 @@ GameGUI::GameGUI(int window_width, int window_height, int board_cols, int board_
             } else {
                 throw std::runtime_error("Window creation returned success but window is not open");
             }
-        } catch (const std::exception& e) {
+        } catch (std::exception const& e) {
             retry_count++;
             XLOGF(WARN, "SFML window creation failed (attempt {}): {}", retry_count, e.what());
-            
+
             if (retry_count >= max_retries) {
-                throw std::runtime_error("Failed to create SFML window after " + std::to_string(max_retries) + 
-                                       " attempts. This may be due to X11/display issues. Try: wsl --shutdown from Windows, then restart WSL.");
+                throw std::runtime_error("Failed to create SFML window after " +
+                                         std::to_string(max_retries) +
+                                         " attempts. This may be due to X11/display issues. Try: "
+                                         "wsl --shutdown from Windows, then restart WSL.");
             }
         }
     }
-    
+
     // Initialize renderer after successful window creation
     m_renderer = std::make_unique<BoardRenderer>(m_window, m_layout);
-    
+
     m_window.setFramerateLimit(GUI::FPS);
-    
+
     m_human_player = Player::Red;
     m_ai_player = Player::Blue;
 }
@@ -69,41 +71,43 @@ bool GameGUI::ask_human_goes_first() {
     return (first == 'y' || first == 'Y');
 }
 
-GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_model, InteractivePlayOptions opts, bool human_goes_first, folly::CPUThreadPoolExecutor& thread_pool) {
+GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_model,
+                                           InteractivePlayOptions opts, bool human_goes_first,
+                                           folly::CPUThreadPoolExecutor& thread_pool) {
     // Store thread pool reference for AI work
     m_thread_pool = &thread_pool;
-    
+
     m_human_player = human_goes_first ? Player::Red : Player::Blue;
     m_ai_player = other_player(m_human_player);
-    
-    GameRecorder recorder(board, 
-                         human_goes_first ? "Player" : "Deep Wallwars",
-                         human_goes_first ? "Deep Wallwars" : "Player");
-    
-    MCTS mcts{ai_model, std::move(board), 
+
+    GameRecorder recorder(board, human_goes_first ? "Player" : "Deep Wallwars",
+                          human_goes_first ? "Deep Wallwars" : "Player");
+
+    MCTS mcts{ai_model,
+              std::move(board),
               {.max_parallelism = opts.max_parallel_samples, .seed = opts.seed}};
-    
+
     m_is_human_turn = human_goes_first;
     m_actions_left = 2;
     m_game_over = false;
-    
+
     // Render initial state immediately
     render(mcts.current_board());
     m_window.display();
-    
+
     // Main rendering loop - stays on main thread
     while (m_window.isOpen() && !m_game_over) {
         // Handle events (always process events for responsiveness)
         if (!process_events(mcts.current_board(), mcts, recorder)) {
-            break; // Window closed
+            break;  // Window closed
         }
-        
+
         // Check for game over
         check_game_over(mcts.current_board(), recorder);
         if (m_game_over) {
             break;
         }
-        
+
         // AI turn logic
         if (!m_is_human_turn && !m_game_over) {
             process_ai_turn(mcts, opts.samples, recorder);
@@ -112,58 +116,55 @@ GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_mo
                 m_actions_left = 2;
             }
         }
-        
+
         // Render everything - always on main thread
         if (m_ai_thinking) {
-            m_renderer->render_with_ai_thinking(mcts.current_board(), get_current_player(), m_actions_left,
-                                           m_highlight_type, m_highlight_row, m_highlight_col);
+            m_renderer->render_with_ai_thinking(mcts.current_board(), get_current_player(),
+                                                m_actions_left, m_highlight_type, m_highlight_row,
+                                                m_highlight_col);
         } else {
             render(mcts.current_board());
         }
         m_window.display();
     }
-    
+
     // Safe JSON serialization with error handling
     try {
         XLOGF(INFO, "Game finished, json string: {}", recorder.to_json());
-    } catch (const std::exception& e) {
+    } catch (std::exception const& e) {
         XLOGF(ERR, "Failed to serialize game to JSON: {}", e.what());
     }
     return recorder;
 }
 
-bool GameGUI::process_events(const Board& board, MCTS& mcts, GameRecorder& recorder) {
+bool GameGUI::process_events(Board const& board, MCTS& mcts, GameRecorder& recorder) {
     sf::Event event;
     while (m_window.pollEvent(event)) {
         switch (event.type) {
             case sf::Event::Closed:
                 m_window.close();
                 return false;
-                
+
             case sf::Event::MouseButtonPressed:
                 if (event.mouseButton.button == sf::Mouse::Left) {
                     sf::Vector2i mouse_pos(event.mouseButton.x, event.mouseButton.y);
                     handle_mouse_click(mouse_pos, board, mcts, recorder);
                 }
                 break;
-                
-            case sf::Event::KeyPressed:
-                {
-                    handle_key_press(event.key.code, board, mcts, recorder);
-                }
-                break;
-                
-            case sf::Event::MouseMoved:
-                {
-                    // Update highlighting
-                    sf::Vector2i mouse_pos(event.mouseMove.x, event.mouseMove.y);
-                    auto [element_type, row, col] = m_input_handler.get_element_at_position(mouse_pos);
-                    m_highlight_type = element_type;
-                    m_highlight_row = row;
-                    m_highlight_col = col;
-                }
-                break;
-                
+
+            case sf::Event::KeyPressed: {
+                handle_key_press(event.key.code, board, mcts, recorder);
+            } break;
+
+            case sf::Event::MouseMoved: {
+                // Update highlighting
+                sf::Vector2i mouse_pos(event.mouseMove.x, event.mouseMove.y);
+                auto [element_type, row, col] = m_input_handler.get_element_at_position(mouse_pos);
+                m_highlight_type = element_type;
+                m_highlight_row = row;
+                m_highlight_col = col;
+            } break;
+
             default:
                 break;
         }
@@ -171,19 +172,20 @@ bool GameGUI::process_events(const Board& board, MCTS& mcts, GameRecorder& recor
     return true;
 }
 
-void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, const Board& board, MCTS& mcts, GameRecorder& recorder) {
+void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCTS& mcts,
+                                 GameRecorder& recorder) {
     if (m_game_over || !m_is_human_turn) {
-        return; // Game over or not human's turn
+        return;  // Game over or not human's turn
     }
-    
+
     auto action = m_input_handler.handle_mouse_click(mouse_pos, board, m_human_player);
-    
+
     switch (action.type) {
         case InputHandler::MouseAction::MOVE_TO_CELL: {
             // Find the direction to move to the target cell
             Cell current_pos = board.position(m_human_player);
             Cell target = action.target_cell;
-            
+
             if (m_input_handler.is_cell_reachable_in_1_action(board, m_human_player, target)) {
                 // Find the direction
                 auto dirs = board.legal_directions(m_human_player);
@@ -199,12 +201,12 @@ void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, const Board& board, MCT
                                 try {
                                     Move human_move{m_human_actions[0], m_human_actions[1]};
                                     recorder.record_move(m_human_player, human_move);
-                                } catch (const std::exception& e) {
+                                } catch (std::exception const& e) {
                                     XLOGF(WARN, "Failed to record human move: {}", e.what());
                                 }
                                 m_human_actions.clear();
                             }
-                            m_is_human_turn = false; // Switch to AI turn
+                            m_is_human_turn = false;  // Switch to AI turn
                         }
                         break;
                     }
@@ -212,7 +214,7 @@ void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, const Board& board, MCT
             }
             break;
         }
-        
+
         case InputHandler::MouseAction::PLACE_WALL: {
             Wall wall = action.target_wall;
             mcts.force_action(wall);
@@ -225,35 +227,36 @@ void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, const Board& board, MCT
                     try {
                         Move human_move{m_human_actions[0], m_human_actions[1]};
                         recorder.record_move(m_human_player, human_move);
-                    } catch (const std::exception& e) {
+                    } catch (std::exception const& e) {
                         XLOGF(WARN, "Failed to record human move: {}", e.what());
                     }
                     m_human_actions.clear();
                 }
-                m_is_human_turn = false; // Switch to AI turn
+                m_is_human_turn = false;  // Switch to AI turn
             }
             break;
         }
-        
+
         default:
             break;
     }
 }
 
-void GameGUI::handle_key_press(sf::Keyboard::Key key, const Board& board, MCTS& mcts, GameRecorder& recorder) {
+void GameGUI::handle_key_press(sf::Keyboard::Key key, Board const& board, MCTS& mcts,
+                               GameRecorder& recorder) {
     if (m_game_over) {
         return;
     }
-    
+
     if (key == sf::Keyboard::Escape) {
         m_window.close();
         return;
     }
-    
+
     if (!m_is_human_turn) {
-        return; // Not human's turn
+        return;  // Not human's turn
     }
-    
+
     auto direction = m_input_handler.handle_key_press(key);
     if (direction) {
         // Check if move is legal
@@ -270,12 +273,12 @@ void GameGUI::handle_key_press(sf::Keyboard::Key key, const Board& board, MCTS& 
                         try {
                             Move human_move{m_human_actions[0], m_human_actions[1]};
                             recorder.record_move(m_human_player, human_move);
-                        } catch (const std::exception& e) {
+                        } catch (std::exception const& e) {
                             XLOGF(WARN, "Failed to record human move: {}", e.what());
                         }
                         m_human_actions.clear();
                     }
-                    m_is_human_turn = false; // Switch to AI turn
+                    m_is_human_turn = false;  // Switch to AI turn
                 }
                 break;
             }
@@ -288,17 +291,17 @@ void GameGUI::advance_action() {
     // Note: The actual turn management is handled by MCTS
     // We just track actions left for display purposes
     if (m_actions_left <= 0) {
-        m_actions_left = 2; // Reset for next turn
+        m_actions_left = 2;  // Reset for next turn
     }
 }
 
-void GameGUI::check_game_over(const Board& board, GameRecorder& recorder) {
+void GameGUI::check_game_over(Board const& board, GameRecorder& recorder) {
     Winner winner = board.winner();
     if (winner != Winner::Undecided) {
         recorder.record_winner(winner);
         m_game_over = true;
         m_winner = winner;
-        
+
         std::string winner_str;
         switch (winner) {
             case Winner::Red:
@@ -321,27 +324,28 @@ Player GameGUI::get_current_player() const {
     return m_is_human_turn ? m_human_player : m_ai_player;
 }
 
-void GameGUI::render(const Board& board) {
+void GameGUI::render(Board const& board) {
     if (!m_is_human_turn && !m_game_over) {
         // Show AI thinking indicator
-        m_renderer->render_with_ai_thinking(board, get_current_player(), m_actions_left, 
-                                       m_highlight_type, m_highlight_row, m_highlight_col);
+        m_renderer->render_with_ai_thinking(board, get_current_player(), m_actions_left,
+                                            m_highlight_type, m_highlight_row, m_highlight_col);
     } else {
         // Normal rendering
-        m_renderer->render(board, get_current_player(), m_actions_left, 
-                         m_highlight_type, m_highlight_row, m_highlight_col);
+        m_renderer->render(board, get_current_player(), m_actions_left, m_highlight_type,
+                           m_highlight_row, m_highlight_col);
     }
 }
 
 void GameGUI::process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder) {
     m_ai_thinking = true;
-    
+
     // Use the existing sample_and_commit_to_move method which handles the complete move properly
     Cell ai_start_cell = mcts.current_board().position(m_ai_player);
-    
+
     // Schedule AI work on thread pool and use blockingWait to get the result
-    auto ai_move = folly::coro::blockingWait(mcts.sample_and_commit_to_move(samples).scheduleOn(m_thread_pool));
-    
+    auto ai_move = folly::coro::blockingWait(
+        mcts.sample_and_commit_to_move(samples).scheduleOn(m_thread_pool));
+
     if (!ai_move) {
         // AI has no moves, human wins
         XLOGF(INFO, "AI has no legal moves, human wins");
@@ -350,36 +354,39 @@ void GameGUI::process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder) {
         m_ai_thinking = false;
         return;
     }
-    
+
     // Record the move
     recorder.record_move(m_ai_player, *ai_move);
-    
+
     // Safe logging with error handling
     try {
         XLOGF(INFO, "AI played: {}", ai_move->standard_notation(ai_start_cell));
-    } catch (const std::exception& e) {
+    } catch (std::exception const& e) {
         XLOGF(WARN, "AI played a move but couldn't convert to standard notation: {}", e.what());
     }
-    
+
     check_game_over(mcts.current_board(), recorder);
     m_ai_thinking = false;
 }
 
 // Standalone GUI function for interactive play
-GameRecorder interactive_play_gui(Board board, InteractivePlayOptions opts, folly::CPUThreadPoolExecutor& thread_pool) {
+GameRecorder interactive_play_gui(Board board, InteractivePlayOptions opts,
+                                  folly::CPUThreadPoolExecutor& thread_pool) {
     // Ask for player choice before creating GUI window
     bool human_goes_first = GameGUI::ask_human_goes_first();
-    
+
     // Limit parallelism for GUI mode to prevent threading issues
     int safe_parallelism = std::min(opts.max_parallel_samples, 4);
     if (safe_parallelism != opts.max_parallel_samples) {
-        std::cout << "Limiting parallelism to " << safe_parallelism << " for GUI mode (was " << opts.max_parallel_samples << ")\n";
+        std::cout << "Limiting parallelism to " << safe_parallelism << " for GUI mode (was "
+                  << opts.max_parallel_samples << ")\n";
         opts.max_parallel_samples = safe_parallelism;
     }
-    
-    GameGUI gui(GUI::DEFAULT_WINDOW_WIDTH, GUI::DEFAULT_WINDOW_HEIGHT, 
-                board.columns(), board.rows());
-    return gui.run_interactive_game(std::move(board), opts.model, opts, human_goes_first, thread_pool);
+
+    GameGUI gui(GUI::DEFAULT_WINDOW_WIDTH, GUI::DEFAULT_WINDOW_HEIGHT, board.columns(),
+                board.rows());
+    return gui.run_interactive_game(std::move(board), opts.model, opts, human_goes_first,
+                                    thread_pool);
 }
 
-} // namespace GUI 
+}  // namespace GUI

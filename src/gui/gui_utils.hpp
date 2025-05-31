@@ -10,7 +10,7 @@ struct LayoutDimensions {
     int window_height;
     int board_cols;
     int board_rows;
-    
+
     // Calculated dimensions
     int margin_width;
     int margin_height;
@@ -30,9 +30,9 @@ struct LayoutDimensions {
     int board_height;
     int shared_cell_offset_width;
     int shared_cell_offset_height;
-    
+
     LayoutDimensions(int window_w, int window_h, int cols, int rows);
-    
+
     // Coordinate conversion methods
     sf::Vector2f cell_pos_to_coords(int row, int col) const;
     sf::Vector2f corner_pos_to_coords(int row, int col) const;
@@ -41,7 +41,7 @@ struct LayoutDimensions {
 };
 
 // Helper function to increment color with bounds checking
-sf::Color increment_color(const sf::Color& color, int increment);
+sf::Color increment_color(sf::Color const& color, int increment);
 
 // Element types for mouse interaction
 enum class ElementType {
@@ -52,4 +52,4 @@ enum class ElementType {
     CORNER
 };
 
-} // namespace GUI 
+}  // namespace GUI
