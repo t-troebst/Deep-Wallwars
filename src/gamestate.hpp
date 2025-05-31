@@ -4,6 +4,7 @@
 #include <compare>
 #include <cstdint>
 #include <iosfwd>
+#include <optional>
 #include <set>
 #include <span>
 #include <variant>
@@ -140,6 +141,8 @@ public:
     // Computes relative distances from a given start cell to all other cells on the board.
     // Distances are normalized to be between 0 and 1.
     void fill_relative_distances(Cell start, std::span<float> dists) const;
+
+    std::optional<Player> wall_owner(Wall wall) const;
 
     std::vector<std::array<bool, 4>> blocked_directions() const;
 

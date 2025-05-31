@@ -67,3 +67,7 @@ Optional:
 
 * PyTorch (for model creation) w/ onnx (for exporting)
 * fastai  (for training)
+
+## GUI Font Setup
+
+The GUI includes a bundled DejaVu Sans font (`assets/gui/fonts/DejaVuSans.ttf`) for reliable text rendering across all platforms. No additional setup is required.

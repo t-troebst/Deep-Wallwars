@@ -65,6 +65,10 @@ std::shared_ptr<nv::ICudaEngine> load_serialized_engine(nv::IRuntime& runtime,
 
     XLOGF(INFO, "Loaded engine size: {} MiB", size / 1024.0 / 1024.0);
 
-    return std::shared_ptr<nv::ICudaEngine>(
-        runtime.deserializeCudaEngine(serialized_engine.data(), size));
+    auto* raw_engine = runtime.deserializeCudaEngine(serialized_engine.data(), size);
+    if (!raw_engine) {
+        throw std::runtime_error("Failed to deserialize CUDA engine - this usually indicates CUDA is out of memory or the model file is corrupted");
+    }
+
+    return std::shared_ptr<nv::ICudaEngine>(raw_engine);
 }

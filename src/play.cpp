@@ -219,6 +219,8 @@ folly::coro::Task<std::vector<GameRecorder>> evaluation_play(Board board, int ga
 
 folly::coro::Task<> training_play(Board board, int games, TrainingPlayOptions opts) {
     auto* executor = co_await folly::coro::co_current_executor;
+    XLOGF(INFO, "Creating {} game tasks with max_parallel_games = {}", games, opts.max_parallel_games);
+    
     auto game_tasks = views::iota(1, games + 1) | views::transform([&](int i) {
                           return training_play_single(board, opts.model1, opts.model2, i, opts)
                               .scheduleOn(executor);

@@ -27,6 +27,7 @@ add_library(core OBJECT
     src/state_conversions.cpp
     src/tensorrt_model.cpp
 )
+
 target_link_libraries(core PUBLIC Folly::folly CUDA::cudart nvinfer nvonnxparser atomic)
 
 add_executable(deep_ww
@@ -46,4 +47,59 @@ if (Catch2_FOUND)
 
     target_link_libraries(unit_tests PRIVATE core Catch2::Catch2)
     target_include_directories(unit_tests PRIVATE src)
+endif()
+
+# ============================================================================
+# GUI Support (SFML) - Optional
+# ============================================================================
+
+# Add SFML for GUI support
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(SFML QUIET sfml-graphics sfml-window sfml-system)
+endif()
+
+# Fallback to find_package if pkg-config didn't work
+if(NOT SFML_FOUND)
+    find_package(SFML 2.5 COMPONENTS graphics window system QUIET)
+endif()
+
+# Set up GUI support
+if(SFML_FOUND)
+    message(STATUS "SFML found - GUI support enabled")
+    set(GUI_ENABLED TRUE)
+    
+    # Add GUI source files to core library
+    target_sources(core PRIVATE
+        src/gui/gui_utils.cpp
+        src/gui/input_handler.cpp
+        src/gui/board_renderer.cpp
+        src/gui/game_gui.cpp
+    )
+    
+    # Link SFML libraries - handle both pkg-config and find_package results
+    if(SFML_LIBRARIES)
+        # pkg-config result
+        target_link_libraries(core PUBLIC ${SFML_LIBRARIES})
+        if(SFML_INCLUDE_DIRS)
+            target_include_directories(core PUBLIC ${SFML_INCLUDE_DIRS})
+        endif()
+    else()
+        # find_package result - use modern targets if available
+        if(TARGET sfml-graphics)
+            target_link_libraries(core PUBLIC sfml-graphics sfml-window sfml-system)
+        else()
+            # Fallback to old-style variables
+            target_link_libraries(core PUBLIC ${SFML_GRAPHICS_LIBRARY} ${SFML_WINDOW_LIBRARY} ${SFML_SYSTEM_LIBRARY})
+            if(SFML_INCLUDE_DIR)
+                target_include_directories(core PUBLIC ${SFML_INCLUDE_DIR})
+            endif()
+        endif()
+    endif()
+    
+    # Enable GUI compilation flag
+    target_compile_definitions(core PUBLIC GUI_ENABLED)
+else()
+    message(STATUS "SFML not found - GUI support disabled. Install libsfml-dev to enable GUI.")
+    set(GUI_ENABLED FALSE)
 endif()
