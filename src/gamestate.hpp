@@ -11,16 +11,29 @@
 #include <variant>
 #include <vector>
 
-enum class Direction { Right, Down, Left, Up };
+enum class Direction {
+    Right,
+    Down,
+    Left,
+    Up
+};
 
 constexpr std::array<Direction, 4> kDirections = {Direction::Right, Direction::Down,
                                                   Direction::Left, Direction::Up};
 
 [[nodiscard]] Direction flip_horizontal(Direction dir);
 
-enum class Player { Red, Blue };
+enum class Player {
+    Red,
+    Blue
+};
 
-enum class Winner { Red, Blue, Draw, Undecided };
+enum class Winner {
+    Red,
+    Blue,
+    Draw,
+    Undecided
+};
 
 Winner winner_from_player(Player player);
 Player other_player(Player player);
@@ -37,7 +50,10 @@ struct Cell {
 
 struct Wall {
     Cell cell;
-    enum Type { Right, Down } type;
+    enum Type {
+        Right,
+        Down
+    } type;
 
     Wall() = default;
     Wall(Cell cell, Type type);
@@ -73,7 +89,10 @@ struct Move {
 
 struct Turn {
     Player player;
-    enum { First, Second } action;
+    enum {
+        First,
+        Second
+    } action;
 
     bool operator==(Turn const& other) const = default;
 

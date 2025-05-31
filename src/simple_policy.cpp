@@ -3,7 +3,8 @@
 SimplePolicy::SimplePolicy(float move_prior, float good_move_bias, float bad_move_bias)
     : m_move_prior{move_prior}, m_good_move_bias{good_move_bias}, m_bad_move_bias{bad_move_bias} {}
 
-folly::coro::Task<Evaluation> SimplePolicy::operator()(Board const& board, Turn turn, std::optional<Cell> previous_position) {
+folly::coro::Task<Evaluation> SimplePolicy::operator()(Board const& board, Turn turn,
+                                                       std::optional<Cell> previous_position) {
     std::vector<Wall> legal_walls;
     if (m_move_prior < 1) {
         legal_walls = board.legal_walls();

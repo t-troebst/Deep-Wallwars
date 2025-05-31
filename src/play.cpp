@@ -86,7 +86,7 @@ folly::coro::Task<GameRecorder> interactive_play(Board board, InteractivePlayOpt
     co_return recorder;
 }
 
-folly::coro::Task<GameResult> training_play_single(const Board& board, EvaluationFunction evaluate1,
+folly::coro::Task<GameResult> training_play_single(Board const& board, EvaluationFunction evaluate1,
                                                    EvaluationFunction evaluate2, int index,
                                                    TrainingPlayOptions opts) {
     MCTS mcts1{evaluate1,
@@ -153,7 +153,7 @@ folly::coro::Task<GameResult> training_play_single(const Board& board, Evaluatio
     co_return {Winner::Undecided, mcts1.wasted_inferences() + mcts2.wasted_inferences()};
 }
 
-folly::coro::Task<GameRecorder> evaluation_play_single(const Board& board, int index,
+folly::coro::Task<GameRecorder> evaluation_play_single(Board const& board, int index,
                                                        EvaluationPlayOptions opts) {
     auto const& red = index % 2 == 0 ? opts.model1 : opts.model2;
     auto const& blue = index % 2 == 0 ? opts.model2 : opts.model1;
@@ -220,7 +220,8 @@ folly::coro::Task<std::vector<GameRecorder>> evaluation_play(Board board, int ga
 folly::coro::Task<> training_play(Board board, int games, TrainingPlayOptions opts) {
     auto* executor = co_await folly::coro::co_current_executor;
     auto game_tasks = views::iota(1, games + 1) | views::transform([&](int i) {
-                          return training_play_single(board, opts.model1, opts.model2, i, opts).scheduleOn(executor);
+                          return training_play_single(board, opts.model1, opts.model2, i, opts)
+                              .scheduleOn(executor);
                       });
 
     auto results = co_await folly::coro::collectAllWindowed(game_tasks, opts.max_parallel_games);
@@ -270,7 +271,8 @@ folly::coro::Task<std::vector<GameRecorder>> ranking_play(Board board, int games
                                             .seed = opts.seed};
             auto game_tasks =
                 views::iota(0, games_per_matchup) | views::transform([&, game_index](int i) {
-                    return evaluation_play_single(board, game_index + i, eval_opts).scheduleOn(executor);
+                    return evaluation_play_single(board, game_index + i, eval_opts)
+                        .scheduleOn(executor);
                 });
             game_index += games_per_matchup;
             auto matchup_recorders = co_await folly::coro::collectAllWindowed(

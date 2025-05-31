@@ -45,7 +45,7 @@ DEFINE_string(ranking, "", "Folder of *.trt models to rank against each other");
 DEFINE_int32(rank_last, 5, "Number of models that each model plays against during ranking");
 DEFINE_int32(models_to_rank, 0, "Number of models that play games for ranking (0 for all)");
 
-const int kBatchedModelQueueSize = 4096;
+int const kBatchedModelQueueSize = 4096;
 
 enum class Mode {
     Train,
@@ -55,7 +55,8 @@ enum class Mode {
 };
 
 // Creates and validates a model, returning it as an EvaluationFunction
-EvaluationFunction create_and_validate_model(nv::IRuntime& runtime, std::string const& model_flag, Mode mode) {
+EvaluationFunction create_and_validate_model(nv::IRuntime& runtime, std::string const& model_flag,
+                                             Mode mode) {
     if (model_flag == "simple") {
         return SimplePolicy(FLAGS_move_prior, FLAGS_good_move, FLAGS_bad_move);
     }
@@ -69,7 +70,7 @@ EvaluationFunction create_and_validate_model(nv::IRuntime& runtime, std::string 
     if (!engine) {
         throw std::runtime_error("Failed to load TensorRT engine from: " + model_flag);
     }
-    
+
     std::vector<std::unique_ptr<Model>> tensor_rt_models;
     // More models = more parallelizable work for the scheduler on the GPU so
     // we can get slightly higher GPU utilization.
@@ -78,10 +79,8 @@ EvaluationFunction create_and_validate_model(nv::IRuntime& runtime, std::string 
     for (int i = 0; i < num_models; i++) {
         tensor_rt_models.push_back(std::make_unique<TensorRTModel>(engine));
     }
-    auto batched_model = std::make_shared<BatchedModel>(
-        std::move(tensor_rt_models),
-        kBatchedModelQueueSize
-    );
+    auto batched_model =
+        std::make_shared<BatchedModel>(std::move(tensor_rt_models), kBatchedModelQueueSize);
     BatchedModelPolicy batched_model_policy(std::move(batched_model));
     return CachedPolicy(std::move(batched_model_policy), FLAGS_cache_size);
 }
@@ -112,7 +111,8 @@ std::string get_usage_message() {
         << "SIMPLE POLICY OPTIONS: policy that primarily tries to move towards the goal\n"
         << "    --move_prior N  # How likely it is to choose a pawn move (default 0.3)\n"
         << "    --good_move N   # Bias for pawn moves that get closer to the goal (default 1.5)\n"
-        << "    --bad_move N    # Bias for pawn moves that get further from the goal (default 0.75)\n"
+        << "    --bad_move N    # Bias for pawn moves that get further from the goal (default "
+           "0.75)\n"
         << "See --help for all options\n";
     return oss.str();
 }
@@ -153,15 +153,15 @@ void train(EvaluationFunction const& eval_fn) {
 
     // Get cache stats if available
     if (auto* cached_policy = eval_fn.target<CachedPolicy>()) {
-        XLOGF(INFO, "{} cache hits, {} cache misses during play.", 
-              cached_policy->cache_hits(), cached_policy->cache_misses());
-        
+        XLOGF(INFO, "{} cache hits, {} cache misses during play.", cached_policy->cache_hits(),
+              cached_policy->cache_misses());
+
         // Get batched model stats
         if (auto* policy = cached_policy->underlying_policy().target<BatchedModelPolicy>()) {
             auto inferences = policy->total_inferences();
             auto batches = policy->total_batches();
-            XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", 
-                  inferences, batches, double(inferences) / batches);
+            XLOGF(INFO, "{} inferences were sent in {} batches ({} per batch)", inferences, batches,
+                  double(inferences) / batches);
         }
     }
 }
@@ -170,15 +170,14 @@ void evaluate(EvaluationFunction const& eval_fn1, EvaluationFunction const& eval
     Board board{FLAGS_columns, FLAGS_rows};
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
 
-    auto recorders =
-        folly::coro::blockingWait(evaluation_play(board, FLAGS_games,
-                                                  {
-                                                      .model1 = {eval_fn1, "Model1"},
-                                                      .model2 = {eval_fn2, "Model2"},
-                                                      .samples = FLAGS_samples,
-                                                      .seed = FLAGS_seed,
-                                                  })
-                                      .scheduleOn(&thread_pool));
+    auto recorders = folly::coro::blockingWait(evaluation_play(board, FLAGS_games,
+                                                               {
+                                                                   .model1 = {eval_fn1, "Model1"},
+                                                                   .model2 = {eval_fn2, "Model2"},
+                                                                   .samples = FLAGS_samples,
+                                                                   .seed = FLAGS_seed,
+                                                               })
+                                                   .scheduleOn(&thread_pool));
 
     for (auto const& [player, results] : tally_results(recorders)) {
         XLOGF(INFO, "{} has a W/L/D of {}/{}/{}.", player, results.wins, results.losses,
@@ -187,21 +186,21 @@ void evaluate(EvaluationFunction const& eval_fn1, EvaluationFunction const& eval
 
     // Get cache stats for first model if available
     if (auto* cached_policy = eval_fn1.target<CachedPolicy>()) {
-        XLOGF(INFO, "Model1: {} cache hits, {} cache misses during play.", 
+        XLOGF(INFO, "Model1: {} cache hits, {} cache misses during play.",
               cached_policy->cache_hits(), cached_policy->cache_misses());
-        
+
         // Get batched model stats for first model
         if (auto* policy = cached_policy->underlying_policy().target<BatchedModelPolicy>()) {
             auto inferences = policy->total_inferences();
             auto batches = policy->total_batches();
-            XLOGF(INFO, "Model1: {} inferences were sent in {} batches ({} per batch)", 
-                  inferences, batches, double(inferences) / batches);
+            XLOGF(INFO, "Model1: {} inferences were sent in {} batches ({} per batch)", inferences,
+                  batches, double(inferences) / batches);
         }
     }
 }
 
 void interactive(EvaluationFunction const& eval_fn) {
-    Board board{FLAGS_columns, FLAGS_rows};   
+    Board board{FLAGS_columns, FLAGS_rows};
     folly::CPUThreadPoolExecutor thread_pool(FLAGS_j);
     folly::coro::blockingWait(interactive_play(board,
                                                {
@@ -326,7 +325,6 @@ int main(int argc, char** argv) {
 
     auto stop = std::chrono::high_resolution_clock::now();
     XLOGF(INFO, "Completed in {} seconds.",
-            std::chrono::duration_cast<std::chrono::seconds>(stop - start).count());
+          std::chrono::duration_cast<std::chrono::seconds>(stop - start).count());
     return 0;
-
 }

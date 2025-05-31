@@ -9,7 +9,7 @@
 
 namespace nv = nvinfer1;
 
-TensorRTModel::TensorRTModel(std::shared_ptr<nv::ICudaEngine> engine) 
+TensorRTModel::TensorRTModel(std::shared_ptr<nv::ICudaEngine> engine)
     : m_engine(std::move(engine)), m_context{m_engine->createExecutionContext()} {
     auto const states_dims = m_engine->getTensorShape("States");
 
@@ -54,7 +54,7 @@ void TensorRTModel::inference(std::span<float> states, Output const& out) {
 }
 
 std::shared_ptr<nv::ICudaEngine> load_serialized_engine(nv::IRuntime& runtime,
-                                                       std::istream& binary_in) {
+                                                        std::istream& binary_in) {
     // Yes I should memory map or whatever but this is fine. :)
 
     // Fetch file size first to initialize the vector with the correct size
@@ -68,6 +68,5 @@ std::shared_ptr<nv::ICudaEngine> load_serialized_engine(nv::IRuntime& runtime,
     XLOGF(INFO, "Loaded engine size: {} MiB", size / 1024.0 / 1024.0);
 
     return std::shared_ptr<nv::ICudaEngine>(
-        runtime.deserializeCudaEngine(serialized_engine.data(), size)
-    );
+        runtime.deserializeCudaEngine(serialized_engine.data(), size));
 }
