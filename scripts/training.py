@@ -114,10 +114,7 @@ def get_training_paths(generation):
 
 
 def save_model(model, name, device):
-    if not os.path.exists(args.models):
-        print(f"Error: Models directory '{args.models}' passed with --models does not exist.")
-        print(f"Create the directory first: mkdir -p {args.models}")
-        exit(1)
+    os.makedirs(args.models, exist_ok=True)
     
     pt_path = f"{args.models}/{name}.pt"
     onnx_path = f"{args.models}/{name}.onnx"
@@ -159,6 +156,7 @@ def load_model(name, device):
 
 
 def run_self_play(model1, model2, generation):
+    os.makedirs(args.data, exist_ok=True)
     print(f"Running self play (generation {generation})...")
     cmd = [
         args.deep_ww,
