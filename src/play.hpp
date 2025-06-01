@@ -56,12 +56,9 @@ struct EvaluationPlayOptions {
 struct RankingPlayOptions {
     std::vector<NamedModel> models;
 
-    int max_matchup_distance = 5;
-
-    // Number of new models to rank, 0 means all of them should be ranked.
-    int models_to_rank = 0;
-
     int samples = 1000;
+    int games_per_matchup = 10;
+    int num_tournaments = 10;
     int max_parallel_games = 128;
     int max_parallel_samples = 32;
     int move_limit = 100;
@@ -76,5 +73,5 @@ folly::coro::Task<> training_play(Board board, int games, TrainingPlayOptions op
 folly::coro::Task<std::vector<GameRecorder>> evaluation_play(Board board, int games,
                                                              EvaluationPlayOptions opts);
 
-folly::coro::Task<std::vector<GameRecorder>> ranking_play(Board board, int games_per_matchup,
-                                                          RankingPlayOptions opts);
+// Generates random tournaments between the models to generate ranking games for bayeselo.
+folly::coro::Task<std::vector<GameRecorder>> ranking_play(Board board, RankingPlayOptions opts);

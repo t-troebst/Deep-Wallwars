@@ -46,8 +46,7 @@ DEFINE_bool(interactive, false, "Enable interactive play against the AI");
 DEFINE_bool(gui, false, "Use GUI instead of console for interactive mode");
 
 DEFINE_string(ranking, "", "Folder of *.trt models to rank against each other");
-DEFINE_int32(rank_last, 5, "Number of models that each model plays against during ranking");
-DEFINE_int32(models_to_rank, 0, "Number of models that play games for ranking (0 for all)");
+DEFINE_int32(tournaments, 10, "Number of tournaments to run for ranking");
 
 int const kBatchedModelQueueSize = 4096;
 
@@ -97,11 +96,10 @@ EvaluationFunction create_and_validate_model(nv::IRuntime& runtime, std::string 
 std::string get_usage_message() {
     std::ostringstream oss;
     oss << "Deep Wallwars Usage:\n\n"
-        << "RANKING: Rank all models in a folder against each other\n"
+        << "RANKING: Rank all models in a folder against each other by playing random tournaments\n"
         << "    ./deep_ww --ranking <model_folder>\n"
         << "  Options:\n"
-        << "    --rank_last N      # Number of models each model plays against (default 5)\n"
-        << "    --models_to_rank N # Number of models to rank (0 for all)\n"
+        << "    --tournaments N    # Number of tournaments to run (default 10)\n"
         << "INTERACTIVE: Play against the AI\n"
         << "    ./deep_ww --interactive --model1 <model.trt | simple>\n"
         << "    ./deep_ww --interactive --model1 <model.trt | simple> --gui  # Use GUI instead of "
@@ -254,12 +252,11 @@ void ranking(nv::IRuntime& runtime) {
     XLOGF(INFO, "Collected {} models. Starting ranking now.", models.size());
 
     auto recorders =
-        folly::coro::blockingWait(ranking_play(board, FLAGS_games,
-                                               {.models = std::move(models),
-                                                .max_matchup_distance = FLAGS_rank_last,
-                                                .models_to_rank = FLAGS_models_to_rank,
-                                                .samples = FLAGS_samples,
-                                                .seed = FLAGS_seed})
+        folly::coro::blockingWait(ranking_play(board, {.models = std::move(models),
+                                                       .samples = FLAGS_samples,
+                                                       .games_per_matchup = FLAGS_games,
+                                                       .num_tournaments = FLAGS_tournaments,
+                                                       .seed = FLAGS_seed})
                                       .scheduleOn(&thread_pool));
 
     std::string json = all_to_json(recorders);

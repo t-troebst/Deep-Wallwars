@@ -4,7 +4,9 @@
 #include <folly/experimental/coro/Task.h>
 #include <folly/logging/xlog.h>
 
+#include <algorithm>
 #include <iostream>
+#include <random>
 #include <ranges>
 
 #include "game_recorder.hpp"
@@ -219,8 +221,9 @@ folly::coro::Task<std::vector<GameRecorder>> evaluation_play(Board board, int ga
 
 folly::coro::Task<> training_play(Board board, int games, TrainingPlayOptions opts) {
     auto* executor = co_await folly::coro::co_current_executor;
-    XLOGF(INFO, "Creating {} game tasks with max_parallel_games = {}", games, opts.max_parallel_games);
-    
+    XLOGF(INFO, "Creating {} game tasks with max_parallel_games = {}", games,
+          opts.max_parallel_games);
+
     auto game_tasks = views::iota(1, games + 1) | views::transform([&](int i) {
                           return training_play_single(board, opts.model1, opts.model2, i, opts)
                               .scheduleOn(executor);
@@ -251,37 +254,99 @@ folly::coro::Task<> training_play(Board board, int games, TrainingPlayOptions op
     XLOGF(INFO, "{} inferences were wasted.", wasted_inferences);
 }
 
-folly::coro::Task<std::vector<GameRecorder>> ranking_play(Board board, int games_per_matchup,
-                                                          RankingPlayOptions opts) {
-    std::vector<folly::coro::Task<GameRecorder>> game_tasks;
-    std::vector<GameRecorder> recorders;
-
-    int game_index = 1;
-    std::size_t start_model =
-        opts.models_to_rank == 0 ? 0 : opts.models.size() - opts.models_to_rank;
+folly::coro::Task<std::pair<std::vector<size_t>, std::vector<GameRecorder>>> run_tournament_round(
+    Board const& board, std::vector<size_t> const& model_indices, RankingPlayOptions const& opts) {
     auto* executor = co_await folly::coro::co_current_executor;
-    for (std::size_t i = start_model; i < opts.models.size(); ++i) {
-        std::size_t rank_start_model = std::max(static_cast<int>(i) - opts.max_matchup_distance, 0);
+    std::vector<size_t> next_round;
+    std::vector<GameRecorder> round_recorders;
 
-        for (std::size_t j = rank_start_model; j < i; ++j) {
-            EvaluationPlayOptions eval_opts{.model1 = opts.models[i],
-                                            .model2 = opts.models[j],
+    std::vector<folly::coro::Task<std::pair<std::pair<size_t, size_t>, GameRecorder>>> game_tasks;
 
-                                            .samples = opts.samples,
-                                            .max_parallel_samples = opts.max_parallel_samples,
-                                            .move_limit = opts.move_limit,
-                                            .seed = opts.seed};
-            auto game_tasks =
-                views::iota(0, games_per_matchup) | views::transform([&, game_index](int i) {
-                    return evaluation_play_single(board, game_index + i, eval_opts)
-                        .scheduleOn(executor);
-                });
-            game_index += games_per_matchup;
-            auto matchup_recorders = co_await folly::coro::collectAllWindowed(
-                std::move(game_tasks), opts.max_parallel_games);
-            recorders.insert(recorders.end(), matchup_recorders.begin(), matchup_recorders.end());
+    for (size_t i = 0; i < model_indices.size() - 1; i += 2) {
+        size_t model1_idx = model_indices[i];
+        size_t model2_idx = model_indices[i + 1];
+
+        EvaluationPlayOptions eval_opts{
+            .model1 = opts.models[model1_idx],
+            .model2 = opts.models[model2_idx],
+            .samples = opts.samples,
+            .max_parallel_samples = opts.max_parallel_samples,
+            .move_limit = opts.move_limit,
+            .seed = static_cast<std::uint32_t>(opts.seed * (model1_idx + 1) * (model2_idx + 1))};
+
+        for (int game_idx = 0; game_idx < opts.games_per_matchup; ++game_idx) {
+            game_tasks.push_back(folly::coro::co_invoke(
+                [&, model1_idx, model2_idx, eval_opts, game_idx]()
+                    -> folly::coro::Task<std::pair<std::pair<size_t, size_t>, GameRecorder>> {
+                    auto recorder = co_await evaluation_play_single(board, game_idx, eval_opts)
+                                        .scheduleOn(executor);
+                    co_return {{model1_idx, model2_idx}, std::move(recorder)};
+                }));
         }
     }
 
+    auto game_results =
+        co_await folly::coro::collectAllWindowed(std::move(game_tasks), opts.max_parallel_games);
+
+    std::unordered_map<std::pair<size_t, size_t>, std::vector<GameRecorder>> matchup_results;
+    for (auto& [matchup, recorder] : game_results) {
+        matchup_results[matchup].push_back(std::move(recorder));
+    }
+
+    for (auto& [matchup, recorders] : matchup_results) {
+        auto [model1_idx, model2_idx] = matchup;
+
+        auto results = tally_results(recorders);
+        auto const& model1_results = results[opts.models[model1_idx].name];
+        auto const& model2_results = results[opts.models[model2_idx].name];
+
+        int model1_score = model1_results.wins + model1_results.draws / 2;
+        int model2_score = model2_results.wins + model2_results.draws / 2;
+
+        next_round.push_back(model1_score >= model2_score ? model1_idx : model2_idx);
+        round_recorders.insert(round_recorders.end(), recorders.begin(), recorders.end());
+    }
+
+    if (model_indices.size() % 2 == 1) {
+        next_round.push_back(model_indices.back());
+    }
+
+    co_return {std::move(next_round), std::move(round_recorders)};
+}
+
+folly::coro::Task<std::vector<GameRecorder>> run_tournament(Board const& board,
+                                                            RankingPlayOptions const& opts) {
+    std::vector<GameRecorder> recorders;
+
+    std::vector<size_t> model_indices(opts.models.size());
+    std::iota(model_indices.begin(), model_indices.end(), 0);
+    std::mt19937 rng(opts.seed);
+    std::shuffle(model_indices.begin(), model_indices.end(), rng);
+
+    int round = 1;
+    while (model_indices.size() > 1) {
+        XLOGF(INFO, "Starting tournament round {} with {} models", round, model_indices.size());
+        auto [next_round, round_recorders] =
+            co_await run_tournament_round(board, model_indices, opts);
+        model_indices = std::move(next_round);
+        recorders.insert(recorders.end(), round_recorders.begin(), round_recorders.end());
+        ++round;
+    }
+
+    XLOGF(INFO, "Tournament winner: {}", opts.models[model_indices[0]].name);
     co_return recorders;
+}
+
+folly::coro::Task<std::vector<GameRecorder>> ranking_play(Board board, RankingPlayOptions opts) {
+    std::vector<GameRecorder> all_recorders;
+
+    for (int i = 0; i < opts.num_tournaments; ++i) {
+        XLOGF(INFO, "Starting tournament {}/{}", i + 1, opts.num_tournaments);
+        opts.seed = static_cast<std::uint32_t>(opts.seed * (i + 1));
+        auto tournament_recorders = co_await run_tournament(board, opts);
+        all_recorders.insert(all_recorders.end(), tournament_recorders.begin(),
+                             tournament_recorders.end());
+    }
+
+    co_return all_recorders;
 }
