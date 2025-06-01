@@ -53,11 +53,8 @@ private:
     Player m_ai_player;
     int m_actions_left = 2;
     GameState m_game_state = GameState::HumanTurn;
+    float m_score_for_human = 0;
     std::vector<Action> m_human_actions;  // Track human actions for move recording
-    Winner m_winner = Winner::Undecided;
-
-    // AI computation state
-    bool m_ai_thinking = false;
 
     // Event processing
     bool process_events(Board& board, MCTS& mcts, GameRecorder& recorder);

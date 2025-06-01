@@ -9,7 +9,7 @@ BoardRenderer::BoardRenderer(sf::RenderWindow& window, LayoutDimensions const& l
     m_font.loadFromMemory(GUI::FONT_BYTES, sizeof(GUI::FONT_BYTES));
 }
 
-void BoardRenderer::render(Board const& board, Player current_player, int actions_left,
+void BoardRenderer::render(Board const& board, Player current_player, int actions_left, float score,
                            ElementType highlight_type, int highlight_row, int highlight_col) {
     // Clear window with background color
     m_window.clear(GUI::BACKGROUND_COLOR);
@@ -43,7 +43,7 @@ void BoardRenderer::render(Board const& board, Player current_player, int action
         }
     }
 
-    draw_game_info(board, current_player, actions_left);
+    draw_game_info(board, current_player, actions_left, score);
 }
 
 void BoardRenderer::set_highlight(ElementType type, int row, int col) {
@@ -362,7 +362,8 @@ void BoardRenderer::write_text(std::string const& text, float left, float top,
     m_window.draw(sftext);
 }
 
-void BoardRenderer::draw_game_info(Board const& board, Player current_player, int actions_left) {
+void BoardRenderer::draw_game_info(Board const& board, Player current_player, int actions_left,
+                                   float score) {
     // Position text below the board
     float text_start_y = m_layout.margin_height + m_layout.perimeter_height +
                          m_layout.board_height + m_layout.perimeter_height + 10;
@@ -378,6 +379,9 @@ void BoardRenderer::draw_game_info(Board const& board, Player current_player, in
 
     write_text("Red Distance: " + std::to_string(red_distance), text_x + 250, text_start_y);
     write_text("Blue Distance: " + std::to_string(blue_distance), text_x + 250, text_start_y + 40);
+
+    // Current AI evaluation for the human player's position
+    write_text("Score: " + std::to_string(score), text_x + 500, text_start_y);
 }
 
 void BoardRenderer::draw_ai_thinking_indicator(int samples_done, int samples_total) {

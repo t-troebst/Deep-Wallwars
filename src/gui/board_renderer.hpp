@@ -13,7 +13,7 @@ public:
     BoardRenderer(sf::RenderWindow& window, LayoutDimensions const& layout);
 
     // Main rendering function
-    void render(Board const& board, Player current_player, int actions_left,
+    void render(Board const& board, Player current_player, int actions_left, float score,
                 ElementType highlight_type = ElementType::NONE, int highlight_row = -1,
                 int highlight_col = -1);
 
@@ -43,7 +43,7 @@ private:
     void draw_walls(Board const& board);
     void draw_players(Board const& board);
     void draw_goals(Board const& board);
-    void draw_game_info(Board const& board, Player current_player, int actions_left);
+    void draw_game_info(Board const& board, Player current_player, int actions_left, float score);
     void draw_reachable_cells(Board const& board, Player current_player, int actions_left);
 
     // Individual drawing primitives

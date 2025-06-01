@@ -286,7 +286,6 @@ void GameGUI::check_game_over(Board const& board, GameRecorder& recorder) {
     if (winner != Winner::Undecided) {
         recorder.record_winner(winner);
         m_game_state = GameState::GameOver;
-        m_winner = winner;
 
         std::string winner_str;
         switch (winner) {
@@ -308,7 +307,8 @@ void GameGUI::check_game_over(Board const& board, GameRecorder& recorder) {
 
 void GameGUI::render(Board const& board, MCTS const& mcts, int total_samples) {
     m_renderer->render(board, m_game_state == GameState::HumanTurn ? m_human_player : m_ai_player,
-                       m_actions_left, m_highlight_type, m_highlight_row, m_highlight_col);
+                       m_actions_left, m_score_for_human, m_highlight_type, m_highlight_row,
+                       m_highlight_col);
 
     if (m_game_state == GameState::WaitingForAI) {
         m_renderer->draw_ai_thinking_indicator(mcts.samples_done(), total_samples);
@@ -342,6 +342,7 @@ void GameGUI::process_ai_turn(MCTS& mcts, Board& board, int samples, GameRecorde
     board.do_action(m_ai_player, ai_move->first);
     board.do_action(m_ai_player, ai_move->second);
     m_game_state = GameState::HumanTurn;
+    m_score_for_human = mcts.root_value();
     m_actions_left = 2;
     check_game_over(mcts.current_board(), recorder);
 }
