@@ -1,5 +1,6 @@
 #include "gamestate.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_get_random_seed.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <random>
@@ -135,5 +136,70 @@ TEST_CASE("Removing random legal walls doesn't disconnect players", "[Game State
 
         CHECK(board.distance(board.position(Player::Red), board.goal(Player::Red)) != -1);
         CHECK(board.distance(board.position(Player::Blue), board.goal(Player::Blue)) != -1);
+    }
+}
+
+TEST_CASE("Fill relative distances", "[Game State]") {
+    Board board{3, 3};
+
+    std::vector<float> dists(9, 1.0f);
+    board.fill_relative_distances({0, 0}, dists);
+
+    CHECK(dists[0] == 0.0f);
+    CHECK(dists[1] == Catch::Approx(0.111111f));
+    CHECK(dists[3] == Catch::Approx(0.111111f));
+    CHECK(dists[4] == Catch::Approx(0.222222f));
+    CHECK(dists[8] == Catch::Approx(0.444444f));
+
+    board.place_wall(Player::Red, {{0, 0}, Direction::Right});
+    board.place_wall(Player::Red, {{0, 0}, Direction::Down});
+    board.fill_relative_distances({0, 0}, dists);
+
+    CHECK(dists[0] == 0.0f);
+    CHECK(dists[1] == 1.0f);
+    CHECK(dists[3] == 1.0f);
+
+    std::vector<std::array<bool, 4>> blocked_dirs = board.blocked_directions();
+    std::vector<std::pair<Cell, int>> queue_vec;
+    std::fill(dists.begin(), dists.end(), 1.0f);
+
+    board.fill_relative_distances({0, 0}, dists, blocked_dirs, queue_vec);
+    CHECK(dists[0] == 0.0f);
+    CHECK(dists[1] == 1.0f);
+    CHECK(dists[3] == 1.0f);
+}
+
+TEST_CASE("Fill relative distances matches distance", "[Game State]") {
+    Board board{5, 5};
+    std::mt19937_64 twister{Catch::getSeed()};
+
+    for (int i = 0; i < 10; ++i) {
+        auto legal_walls = board.legal_walls();
+        if (legal_walls.empty())
+            break;
+
+        std::uniform_int_distribution<std::size_t> dist(0, legal_walls.size() - 1);
+        board.place_wall(Player::Red, legal_walls[dist(twister)]);
+    }
+
+    for (int start_row = 0; start_row < 5; start_row += 2) {
+        for (int start_col = 0; start_col < 5; start_col += 2) {
+            Cell start{start_col, start_row};
+            std::vector<float> dists(25, 1.0f);
+            board.fill_relative_distances(start, dists);
+
+            for (int row = 0; row < 5; ++row) {
+                for (int col = 0; col < 5; ++col) {
+                    Cell target{col, row};
+                    int actual_dist = board.distance(start, target);
+                    if (actual_dist != -1) {
+                        float expected = static_cast<float>(actual_dist) / 25.0f;
+                        CHECK(dists[board.index_from_cell(target)] == Catch::Approx(expected));
+                    } else {
+                        CHECK(dists[board.index_from_cell(target)] == 1.0f);
+                    }
+                }
+            }
+        }
     }
 }
