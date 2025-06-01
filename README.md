@@ -65,7 +65,7 @@ for unit tests is shown below:
 
 ## Pre-Trained Models
 
-There are some pre-trained models for testing in the `checkpoints` folder. The naming convention
+There are some pre-trained models for testing in the `assets/models` folder. The naming convention
 is `{columns}x{rows}_{games used for training}.{extension}`. Each model comes in three formats:
 
 * `.pt` which can be loaded by PyTorch.

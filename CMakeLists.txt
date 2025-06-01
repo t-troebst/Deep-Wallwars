@@ -17,9 +17,9 @@ find_package(folly REQUIRED)
 # Convert ONNX model to TensorRT format
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/5x5_60000.trt
-    COMMAND trtexec --onnx=${CMAKE_CURRENT_SOURCE_DIR}/checkpoints/5x5_60000.onnx 
+    COMMAND trtexec --onnx=${CMAKE_CURRENT_SOURCE_DIR}/assets/models/5x5_60000.onnx 
             --saveEngine=${CMAKE_CURRENT_BINARY_DIR}/5x5_60000.trt --fp16
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/checkpoints/5x5_60000.onnx
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/models/5x5_60000.onnx
     COMMENT "Converting ONNX model to TensorRT format"
 )
 
