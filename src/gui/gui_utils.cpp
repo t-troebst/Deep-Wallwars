@@ -2,8 +2,6 @@
 
 #include <algorithm>
 
-#include "gui_constants.hpp"
-
 namespace GUI {
 
 LayoutDimensions::LayoutDimensions(int window_w, int window_h, int cols, int rows)

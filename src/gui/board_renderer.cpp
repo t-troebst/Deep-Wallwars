@@ -1,7 +1,5 @@
 #include "board_renderer.hpp"
 
-#include <iostream>
-
 #include "font.hpp"
 
 namespace GUI {

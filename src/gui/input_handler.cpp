@@ -1,7 +1,5 @@
 #include "input_handler.hpp"
 
-#include <vector>
-
 namespace GUI {
 
 InputHandler::InputHandler(LayoutDimensions const& layout) : m_layout(layout) {}
