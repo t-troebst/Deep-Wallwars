@@ -14,6 +14,17 @@ find_package(glog REQUIRED)
 find_package(folly REQUIRED)
 # TODO: find TensorRT with CMake
 
+# Convert ONNX model to TensorRT format
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/5x5_60000.trt
+    COMMAND trtexec --onnx=${CMAKE_CURRENT_SOURCE_DIR}/checkpoints/5x5_60000.onnx 
+            --saveEngine=${CMAKE_CURRENT_BINARY_DIR}/5x5_60000.trt --fp16
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/checkpoints/5x5_60000.onnx
+    COMMENT "Converting ONNX model to TensorRT format"
+)
+
+add_custom_target(model_trt ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/5x5_60000.trt)
+
 add_library(core OBJECT
     src/batched_model.cpp
     src/batched_model_policy.cpp
@@ -44,10 +55,12 @@ if (Catch2_FOUND)
         test/gamestate.cpp
         test/main.cpp
         test/mcts.cpp
+        test/tensorrt_model.cpp
     )
 
     target_link_libraries(unit_tests PRIVATE core Catch2::Catch2)
     target_include_directories(unit_tests PRIVATE src)
+    add_dependencies(unit_tests model_trt)
 endif()
 
 # ============================================================================
