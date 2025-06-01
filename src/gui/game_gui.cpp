@@ -87,16 +87,15 @@ GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_mo
               std::move(board),
               {.max_parallelism = opts.max_parallel_samples, .seed = opts.seed}};
 
-    m_is_human_turn = human_goes_first;
+    m_game_state = human_goes_first ? GameState::HumanTurn : GameState::AITurn;
     m_actions_left = 2;
-    m_game_over = false;
 
     // Render initial state immediately
     render(mcts.current_board());
     m_window.display();
 
     // Main rendering loop - stays on main thread
-    while (m_window.isOpen() && !m_game_over) {
+    while (m_window.isOpen() && m_game_state != GameState::GameOver) {
         // Handle events (always process events for responsiveness)
         if (!process_events(mcts.current_board(), mcts, recorder)) {
             break;  // Window closed
@@ -104,27 +103,17 @@ GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_mo
 
         // Check for game over
         check_game_over(mcts.current_board(), recorder);
-        if (m_game_over) {
+        if (m_game_state == GameState::GameOver) {
             break;
         }
 
         // AI turn logic
-        if (!m_is_human_turn && !m_game_over) {
+        if (m_game_state != GameState::HumanTurn) {
             process_ai_turn(mcts, opts.samples, recorder);
-            if (!m_game_over) {
-                m_is_human_turn = true;
-                m_actions_left = 2;
-            }
         }
 
         // Render everything - always on main thread
-        if (m_ai_thinking) {
-            m_renderer->render_with_ai_thinking(mcts.current_board(), get_current_player(),
-                                                m_actions_left, m_highlight_type, m_highlight_row,
-                                                m_highlight_col);
-        } else {
-            render(mcts.current_board());
-        }
+        render(mcts.current_board());
         m_window.display();
     }
 
@@ -174,7 +163,7 @@ bool GameGUI::process_events(Board const& board, MCTS& mcts, GameRecorder& recor
 
 void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCTS& mcts,
                                  GameRecorder& recorder) {
-    if (m_game_over || !m_is_human_turn) {
+    if (m_game_state != GameState::HumanTurn) {
         return;  // Game over or not human's turn
     }
 
@@ -206,7 +195,7 @@ void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCT
                                 }
                                 m_human_actions.clear();
                             }
-                            m_is_human_turn = false;  // Switch to AI turn
+                            m_game_state = GameState::AITurn;
                         }
                         break;
                     }
@@ -232,7 +221,7 @@ void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCT
                     }
                     m_human_actions.clear();
                 }
-                m_is_human_turn = false;  // Switch to AI turn
+                m_game_state = GameState::AITurn;
             }
             break;
         }
@@ -244,17 +233,13 @@ void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCT
 
 void GameGUI::handle_key_press(sf::Keyboard::Key key, Board const& board, MCTS& mcts,
                                GameRecorder& recorder) {
-    if (m_game_over) {
+    if (m_game_state != GameState::HumanTurn) {
         return;
     }
 
     if (key == sf::Keyboard::Escape) {
         m_window.close();
         return;
-    }
-
-    if (!m_is_human_turn) {
-        return;  // Not human's turn
     }
 
     auto direction = m_input_handler.handle_key_press(key);
@@ -278,7 +263,7 @@ void GameGUI::handle_key_press(sf::Keyboard::Key key, Board const& board, MCTS& 
                         }
                         m_human_actions.clear();
                     }
-                    m_is_human_turn = false;  // Switch to AI turn
+                    m_game_state = GameState::AITurn;
                 }
                 break;
             }
@@ -299,7 +284,7 @@ void GameGUI::check_game_over(Board const& board, GameRecorder& recorder) {
     Winner winner = board.winner();
     if (winner != Winner::Undecided) {
         recorder.record_winner(winner);
-        m_game_over = true;
+        m_game_state = GameState::GameOver;
         m_winner = winner;
 
         std::string winner_str;
@@ -320,53 +305,45 @@ void GameGUI::check_game_over(Board const& board, GameRecorder& recorder) {
     }
 }
 
-Player GameGUI::get_current_player() const {
-    return m_is_human_turn ? m_human_player : m_ai_player;
-}
-
 void GameGUI::render(Board const& board) {
-    if (!m_is_human_turn && !m_game_over) {
+    if (m_game_state == GameState::WaitingForAI) {
         // Show AI thinking indicator
-        m_renderer->render_with_ai_thinking(board, get_current_player(), m_actions_left,
-                                            m_highlight_type, m_highlight_row, m_highlight_col);
+        m_renderer->render_with_ai_thinking(board, m_ai_player, m_actions_left, m_highlight_type,
+                                            m_highlight_row, m_highlight_col);
     } else {
         // Normal rendering
-        m_renderer->render(board, get_current_player(), m_actions_left, m_highlight_type,
-                           m_highlight_row, m_highlight_col);
+        m_renderer->render(board, m_game_state == GameState::AITurn ? m_ai_player : m_human_player,
+                           m_actions_left, m_highlight_type, m_highlight_row, m_highlight_col);
     }
 }
 
 void GameGUI::process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder) {
-    m_ai_thinking = true;
+    if (m_game_state == GameState::AITurn) {
+        m_ai_move = mcts.sample_and_commit_to_move(samples).scheduleOn(m_thread_pool).start();
+        m_game_state = GameState::WaitingForAI;
+        return;
+    }
 
-    // Use the existing sample_and_commit_to_move method which handles the complete move properly
-    Cell ai_start_cell = mcts.current_board().position(m_ai_player);
+    assert(m_game_state == GameState::WaitingForAI);
+    if (!m_ai_move.isReady()) {
+        return;
+    }
 
-    // Schedule AI work on thread pool and use blockingWait to get the result
-    auto ai_move = folly::coro::blockingWait(
-        mcts.sample_and_commit_to_move(samples).scheduleOn(m_thread_pool));
+    auto ai_move = m_ai_move.value();
 
     if (!ai_move) {
         // AI has no moves, human wins
         XLOGF(INFO, "AI has no legal moves, human wins");
         recorder.record_winner(winner_from_player(m_human_player));
-        m_game_over = true;
-        m_ai_thinking = false;
+        m_game_state = GameState::GameOver;
         return;
     }
 
     // Record the move
     recorder.record_move(m_ai_player, *ai_move);
-
-    // Safe logging with error handling
-    try {
-        XLOGF(INFO, "AI played: {}", ai_move->standard_notation(ai_start_cell));
-    } catch (std::exception const& e) {
-        XLOGF(WARN, "AI played a move but couldn't convert to standard notation: {}", e.what());
-    }
-
+    m_game_state = GameState::HumanTurn;
+    m_actions_left = 2;
     check_game_over(mcts.current_board(), recorder);
-    m_ai_thinking = false;
 }
 
 // Standalone GUI function for interactive play

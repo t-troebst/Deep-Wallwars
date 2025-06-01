@@ -1,6 +1,7 @@
 #pragma once
 
 #include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/futures/Future.h>
 
 #include <SFML/Graphics.hpp>
 #include <memory>
@@ -33,19 +34,26 @@ public:
                                       folly::CPUThreadPoolExecutor& thread_pool);
 
 private:
+    enum class GameState {
+        HumanTurn,
+        AITurn,
+        WaitingForAI,
+        GameOver,
+    };
+
     sf::RenderWindow m_window;
     LayoutDimensions m_layout;
     std::unique_ptr<BoardRenderer> m_renderer;
     InputHandler m_input_handler;
+    folly::SemiFuture<std::optional<Move>> m_ai_move = std::nullopt;
     folly::CPUThreadPoolExecutor* m_thread_pool = nullptr;  // Reference to thread pool for AI work
 
     // Game state tracking
     Player m_human_player;
     Player m_ai_player;
     int m_actions_left = 2;
-    bool m_is_human_turn = true;          // Track whose turn it is
+    GameState m_game_state = GameState::HumanTurn;
     std::vector<Action> m_human_actions;  // Track human actions for move recording
-    bool m_game_over = false;
     Winner m_winner = Winner::Undecided;
 
     // AI computation state
@@ -64,7 +72,6 @@ private:
     // Game logic helpers
     void advance_action();
     void check_game_over(Board const& board, GameRecorder& recorder);
-    Player get_current_player() const;
 
     // Rendering
     void render(Board const& board);
