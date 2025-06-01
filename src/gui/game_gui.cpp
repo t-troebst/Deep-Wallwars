@@ -83,37 +83,35 @@ GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_mo
     GameRecorder recorder(board, human_goes_first ? "Player" : "Deep Wallwars",
                           human_goes_first ? "Deep Wallwars" : "Player");
 
-    MCTS mcts{ai_model,
-              std::move(board),
-              {.max_parallelism = opts.max_parallel_samples, .seed = opts.seed}};
+    MCTS mcts{ai_model, board, {.max_parallelism = opts.max_parallel_samples, .seed = opts.seed}};
 
     m_game_state = human_goes_first ? GameState::HumanTurn : GameState::AITurn;
     m_actions_left = 2;
 
     // Render initial state immediately
-    render(mcts.current_board());
+    render(board);
     m_window.display();
 
     // Main rendering loop - stays on main thread
     while (m_window.isOpen() && m_game_state != GameState::GameOver) {
         // Handle events (always process events for responsiveness)
-        if (!process_events(mcts.current_board(), mcts, recorder)) {
+        if (!process_events(board, mcts, recorder)) {
             break;  // Window closed
         }
 
         // Check for game over
-        check_game_over(mcts.current_board(), recorder);
+        check_game_over(board, recorder);
         if (m_game_state == GameState::GameOver) {
             break;
         }
 
         // AI turn logic
         if (m_game_state != GameState::HumanTurn) {
-            process_ai_turn(mcts, opts.samples, recorder);
+            process_ai_turn(mcts, board, opts.samples, recorder);
         }
 
         // Render everything - always on main thread
-        render(mcts.current_board());
+        render(board);
         m_window.display();
     }
 
@@ -126,7 +124,7 @@ GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_mo
     return recorder;
 }
 
-bool GameGUI::process_events(Board const& board, MCTS& mcts, GameRecorder& recorder) {
+bool GameGUI::process_events(Board& board, MCTS& mcts, GameRecorder& recorder) {
     sf::Event event;
     while (m_window.pollEvent(event)) {
         switch (event.type) {
@@ -161,7 +159,7 @@ bool GameGUI::process_events(Board const& board, MCTS& mcts, GameRecorder& recor
     return true;
 }
 
-void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCTS& mcts,
+void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board& board, MCTS& mcts,
                                  GameRecorder& recorder) {
     if (m_game_state != GameState::HumanTurn) {
         return;  // Game over or not human's turn
@@ -182,6 +180,7 @@ void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCT
                     if (current_pos.step(dir) == target) {
                         mcts.force_action(dir);
                         m_human_actions.push_back(dir);  // Store for move recording
+                        board.do_action(m_human_player, dir);
                         advance_action();
                         // Check if we completed a full move (2 actions)
                         if (m_actions_left == 2) {
@@ -207,6 +206,7 @@ void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCT
         case InputHandler::MouseAction::PLACE_WALL: {
             Wall wall = action.target_wall;
             mcts.force_action(wall);
+            board.do_action(m_human_player, wall);
             m_human_actions.push_back(wall);  // Store for move recording
             advance_action();
             // Check if we completed a full move (2 actions)
@@ -231,7 +231,7 @@ void GameGUI::handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCT
     }
 }
 
-void GameGUI::handle_key_press(sf::Keyboard::Key key, Board const& board, MCTS& mcts,
+void GameGUI::handle_key_press(sf::Keyboard::Key key, Board& board, MCTS& mcts,
                                GameRecorder& recorder) {
     if (m_game_state != GameState::HumanTurn) {
         return;
@@ -249,6 +249,7 @@ void GameGUI::handle_key_press(sf::Keyboard::Key key, Board const& board, MCTS& 
         for (Direction dir : legal_dirs) {
             if (dir == *direction) {
                 mcts.force_action(dir);
+                board.do_action(m_human_player, dir);
                 m_human_actions.push_back(dir);  // Store for move recording
                 advance_action();
                 // Check if we completed a full move (2 actions)
@@ -317,7 +318,7 @@ void GameGUI::render(Board const& board) {
     }
 }
 
-void GameGUI::process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder) {
+void GameGUI::process_ai_turn(MCTS& mcts, Board& board, int samples, GameRecorder& recorder) {
     if (m_game_state == GameState::AITurn) {
         m_ai_move = mcts.sample_and_commit_to_move(samples).scheduleOn(m_thread_pool).start();
         m_game_state = GameState::WaitingForAI;
@@ -341,6 +342,8 @@ void GameGUI::process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder) {
 
     // Record the move
     recorder.record_move(m_ai_player, *ai_move);
+    board.do_action(m_ai_player, ai_move->first);
+    board.do_action(m_ai_player, ai_move->second);
     m_game_state = GameState::HumanTurn;
     m_actions_left = 2;
     check_game_over(mcts.current_board(), recorder);

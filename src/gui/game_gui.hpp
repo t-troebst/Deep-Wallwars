@@ -60,14 +60,13 @@ private:
     bool m_ai_thinking = false;
 
     // Event processing
-    bool process_events(Board const& board, MCTS& mcts, GameRecorder& recorder);
-    void handle_mouse_click(sf::Vector2i mouse_pos, Board const& board, MCTS& mcts,
+    bool process_events(Board& board, MCTS& mcts, GameRecorder& recorder);
+    void handle_mouse_click(sf::Vector2i mouse_pos, Board& board, MCTS& mcts,
                             GameRecorder& recorder);
-    void handle_key_press(sf::Keyboard::Key key, Board const& board, MCTS& mcts,
-                          GameRecorder& recorder);
+    void handle_key_press(sf::Keyboard::Key key, Board& board, MCTS& mcts, GameRecorder& recorder);
 
     // AI computation helpers
-    void process_ai_turn(MCTS& mcts, int samples, GameRecorder& recorder);
+    void process_ai_turn(MCTS& mcts, Board& board, int samples, GameRecorder& recorder);
 
     // Game logic helpers
     void advance_action();
