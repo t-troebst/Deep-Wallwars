@@ -54,6 +54,15 @@ from the `scripts` folder as your working directory).
 It has some reasonable defaults and relatively self-explanatory command line arguments.
 Fine-tuning the many parameters and the model architecture is work in progress.
 
+It is possible to rank the models generated via training (or any set of models in a folder) with
+the `--ranking` flag to `deep_ww`. This mode plays a series of random tournaments among the models
+and stores all the games in a `json` file (for analysis) and a `pgn` file (for Elo generation).
+The `BayesianElo` tool (see `externals/BayesianElo`) can be used to determine Elo values of the
+models which can be plotted with `scripts/plot_elo.py`. An example for the `5x5_60000` model used
+for unit tests is shown below:
+
+![Elo progression during training](assets/plots/elo_progression.png)
+
 ## Pre-Trained Models
 
 There are some pre-trained models for testing in the `checkpoints` folder. The naming convention
