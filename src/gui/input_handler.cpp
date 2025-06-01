@@ -33,38 +33,12 @@ std::tuple<ElementType, int, int> InputHandler::get_element_at_position(
 
 bool InputHandler::is_cell_reachable_in_1_action(Board const& board, Player player,
                                                  Cell target) const {
-    auto legal_dirs = board.legal_directions(player);
-    Cell current_pos = board.position(player);
-
-    for (Direction dir : legal_dirs) {
-        if (current_pos.step(dir) == target) {
-            return true;
-        }
-    }
-    return false;
+    return board.distance(board.position(player), target) == 1;
 }
 
 bool InputHandler::is_cell_reachable_in_2_actions(Board const& board, Player player,
                                                   Cell target) const {
-    auto legal_dirs = board.legal_directions(player);
-    Cell current_pos = board.position(player);
-
-    // Check all cells reachable in 1 action, then check their neighbors
-    for (Direction dir1 : legal_dirs) {
-        Cell intermediate = current_pos.step(dir1);
-
-        // Create a temporary board to check what's legal from the intermediate position
-        Board temp_board = board;
-        temp_board.take_step(player, dir1);
-        auto second_dirs = temp_board.legal_directions(player);
-
-        for (Direction dir2 : second_dirs) {
-            if (intermediate.step(dir2) == target) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return board.distance(board.position(player), target) == 2;
 }
 
 InputHandler::MouseAction InputHandler::handle_mouse_click(sf::Vector2i mouse_pos,
