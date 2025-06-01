@@ -12,3 +12,4 @@ settings.json
 ignore/
 /src/gui/font.hpp
 CMakeUserPresets.json
+scripts/log.txt

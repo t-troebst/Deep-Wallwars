@@ -25,7 +25,7 @@
 
 namespace nv = nvinfer1;
 
-DEFINE_string(model1, "model.trt", "Serialized TensorRT Model 1 ");
+DEFINE_string(model1, "", "Serialized TensorRT Model 1");
 DEFINE_string(model2, "", "Serialized TensorRT Model 2");
 DEFINE_string(output, "data", "Folder to print training data to");
 DEFINE_uint32(seed, 42, "Random seed");
