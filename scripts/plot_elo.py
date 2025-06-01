@@ -21,5 +21,5 @@ parser.add_argument("--output", help="Path to output", default="elo_progression.
 parser.add_argument("--games", help="Number of games per iteration", default=5000, type=int)
 args = parser.parse_args()
 
-elo_df = pd.read_csv(args.file, sep="\s+")
+elo_df = pd.read_csv(args.file, sep=r"\s+")
 plot_elo_ratings(elo_df["Name"], elo_df["Elo"], args.games, args.output)
