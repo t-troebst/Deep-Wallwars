@@ -678,7 +678,7 @@ std::optional<Player> Board::wall_owner(Wall wall) const {
         } else if (state.has_blue_down_wall) {
             return Player::Blue;
         }
-    } else { // Wall::Right
+    } else {  // Wall::Right
         if (state.has_red_right_wall) {
             return Player::Red;
         } else if (state.has_blue_right_wall) {
