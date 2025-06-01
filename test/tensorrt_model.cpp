@@ -3,13 +3,15 @@
 #include <NvInfer.h>
 #include <folly/logging/xlog.h>
 
-#include <catch2/catch_test_macros.hpp>
 #include <fstream>
 #include <memory>
 #include <vector>
 
 #include "gamestate.hpp"
 #include "state_conversions.hpp"
+
+// Include last because these macros break some code in folly...
+#include <catch2/catch_test_macros.hpp>
 
 namespace nv = nvinfer1;
 
