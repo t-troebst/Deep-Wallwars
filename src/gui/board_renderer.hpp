@@ -17,10 +17,7 @@ public:
                 ElementType highlight_type = ElementType::NONE, int highlight_row = -1,
                 int highlight_col = -1);
 
-    // Render with AI thinking indicator
-    void render_with_ai_thinking(Board const& board, Player current_player, int actions_left,
-                                 ElementType highlight_type = ElementType::NONE,
-                                 int highlight_row = -1, int highlight_col = -1);
+    void draw_ai_thinking_indicator(int samples_done, int samples_total);
 
     // Set highlighting for interactive feedback
     void set_highlight(ElementType type, int row, int col);
@@ -48,7 +45,6 @@ private:
     void draw_goals(Board const& board);
     void draw_game_info(Board const& board, Player current_player, int actions_left);
     void draw_reachable_cells(Board const& board, Player current_player, int actions_left);
-    void draw_ai_thinking_indicator();
 
     // Individual drawing primitives
     void draw_cell(int row, int col, sf::Color const& color);

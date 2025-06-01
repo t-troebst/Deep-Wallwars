@@ -51,11 +51,20 @@ MCTS::MCTS(EvaluationFunction evaluate, Board board, Options options)
     add_root_noise();
 }
 
+int MCTS::samples_done() const {
+    return m_samples_done;
+}
+
+folly::coro::Task<void> MCTS::single_sample() {
+    co_await sample_rec(*m_root);
+    ++m_samples_done;
+}
+
 folly::coro::Task<float> MCTS::sample(int samples) {
+    m_samples_done = 0;
     auto* executor = co_await folly::coro::co_current_executor;
-    auto sample_tasks = views::iota(0, samples) | views::transform([&](int) {
-                            return sample_rec(*m_root).scheduleOn(executor);
-                        });
+    auto sample_tasks = views::iota(0, samples) |
+                        views::transform([&](int) { return single_sample().scheduleOn(executor); });
 
     co_await folly::coro::collectAllWindowed(sample_tasks, m_opts.max_parallelism);
 

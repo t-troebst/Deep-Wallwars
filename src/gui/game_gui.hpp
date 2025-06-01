@@ -73,7 +73,7 @@ private:
     void check_game_over(Board const& board, GameRecorder& recorder);
 
     // Rendering
-    void render(Board const& board);
+    void render(Board const& board, MCTS const& mcts, int total_samples);
     ElementType m_highlight_type = ElementType::NONE;
     int m_highlight_row = -1;
     int m_highlight_col = -1;

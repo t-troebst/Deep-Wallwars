@@ -380,17 +380,7 @@ void BoardRenderer::draw_game_info(Board const& board, Player current_player, in
     write_text("Blue Distance: " + std::to_string(blue_distance), text_x + 250, text_start_y + 40);
 }
 
-void BoardRenderer::render_with_ai_thinking(Board const& board, Player current_player,
-                                            int actions_left, ElementType highlight_type,
-                                            int highlight_row, int highlight_col) {
-    // Regular rendering
-    render(board, current_player, actions_left, highlight_type, highlight_row, highlight_col);
-
-    // Add AI thinking overlay
-    draw_ai_thinking_indicator();
-}
-
-void BoardRenderer::draw_ai_thinking_indicator() {
+void BoardRenderer::draw_ai_thinking_indicator(int samples_done, int samples_total) {
     // Draw a semi-transparent overlay
     float board_left = m_layout.margin_width + m_layout.perimeter_width;
     float board_top = m_layout.margin_height + m_layout.perimeter_height;
@@ -407,6 +397,32 @@ void BoardRenderer::draw_ai_thinking_indicator() {
     float center_y = board_top + board_height / 2 - 16;  // Half font size offset
 
     write_text("AI Thinking...", center_x, center_y, sf::Color::White);
+
+    // Draw progress bar
+    float bar_width = board_width * 0.6f;  // 60% of board width
+    float bar_height = 20.0f;
+    float bar_left = board_left + (board_width - bar_width) / 2;
+    float bar_top = center_y + 40;  // Below the text
+
+    // Background bar
+    sf::RectangleShape bar_bg(sf::Vector2f(bar_width, bar_height));
+    bar_bg.setPosition(bar_left, bar_top);
+    bar_bg.setFillColor(sf::Color(100, 100, 100));  // Dark gray
+    m_window.draw(bar_bg);
+
+    // Progress bar
+    float progress = static_cast<float>(samples_done) / samples_total;
+    sf::RectangleShape progress_bar(sf::Vector2f(bar_width * progress, bar_height));
+    progress_bar.setPosition(bar_left, bar_top);
+    progress_bar.setFillColor(sf::Color(0, 255, 0));  // Green
+    m_window.draw(progress_bar);
+
+    // Draw progress text
+    std::string progress_text =
+        "Samples: " + std::to_string(samples_done) + " / " + std::to_string(samples_total);
+    float text_x = bar_left + (bar_width - 40) / 2;  // Approximate text width offset
+    float text_y = bar_top + bar_height + 10;
+    write_text(progress_text, text_x, text_y, sf::Color::White);
 }
 
 }  // namespace GUI

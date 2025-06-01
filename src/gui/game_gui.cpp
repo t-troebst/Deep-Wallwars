@@ -89,7 +89,7 @@ GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_mo
     m_actions_left = 2;
 
     // Render initial state immediately
-    render(board);
+    render(board, mcts, opts.samples);
     m_window.display();
 
     // Main rendering loop - stays on main thread
@@ -111,7 +111,7 @@ GameRecorder GameGUI::run_interactive_game(Board board, EvaluationFunction ai_mo
         }
 
         // Render everything - always on main thread
-        render(board);
+        render(board, mcts, opts.samples);
         m_window.display();
     }
 
@@ -306,15 +306,12 @@ void GameGUI::check_game_over(Board const& board, GameRecorder& recorder) {
     }
 }
 
-void GameGUI::render(Board const& board) {
+void GameGUI::render(Board const& board, MCTS const& mcts, int total_samples) {
+    m_renderer->render(board, m_game_state == GameState::HumanTurn ? m_human_player : m_ai_player,
+                       m_actions_left, m_highlight_type, m_highlight_row, m_highlight_col);
+
     if (m_game_state == GameState::WaitingForAI) {
-        // Show AI thinking indicator
-        m_renderer->render_with_ai_thinking(board, m_ai_player, m_actions_left, m_highlight_type,
-                                            m_highlight_row, m_highlight_col);
-    } else {
-        // Normal rendering
-        m_renderer->render(board, m_game_state == GameState::AITurn ? m_ai_player : m_human_player,
-                           m_actions_left, m_highlight_type, m_highlight_row, m_highlight_col);
+        m_renderer->draw_ai_thinking_indicator(mcts.samples_done(), total_samples);
     }
 }
 

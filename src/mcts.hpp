@@ -89,6 +89,9 @@ public:
 
     folly::coro::Task<float> sample(int iterations);
 
+    // Thread safe, can be called to see sample progress.
+    int samples_done() const;
+
     // Selects the best action from the perspective of the current player and commits to it.
     // In rare cases there may be no valid action at all (either because the EvaluationFunction is
     // arbitrarily restricting the set of possible actions or because our previous action ran us
@@ -112,6 +115,7 @@ private:
     std::gamma_distribution<float> m_gamma_dist;
     std::mt19937_64 m_twister;
     std::atomic<int> m_wasted_inferences = 0;
+    std::atomic<int> m_samples_done = 0;
     std::vector<NodeInfo> m_history;
 
     void add_root_noise();
