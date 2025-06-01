@@ -71,4 +71,11 @@ Optional:
 
 ## GUI Font Setup
 
-The GUI includes a bundled DejaVu Sans font (`assets/gui/fonts/DejaVuSans.ttf`) for reliable text rendering across all platforms. No additional setup is required.
+The GUI includes a bundled DejaVu Sans font (`assets/gui/fonts/DejaVuSans.ttf`) for reliable text
+rendering across all platforms which gets bundled into the binary at build time, so no additional
+configuration is needed.
+
+## Contributions
+
+Contributions are welcome, please make sure to setup the formatting pre-comit hook with the
+`setup-hooks.sh` script in the repo.
