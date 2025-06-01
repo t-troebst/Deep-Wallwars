@@ -11,3 +11,4 @@
 settings.json
 ignore/
 /src/gui/font.hpp
+CMakeUserPresets.json
