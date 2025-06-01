@@ -2,35 +2,13 @@
 
 #include <iostream>
 
+#include "font.hpp"
+
 namespace GUI {
 
 BoardRenderer::BoardRenderer(sf::RenderWindow& window, LayoutDimensions const& layout)
     : m_window(window), m_layout(layout) {
-    if (!load_bundled_font()) {
-        std::cerr << "Warning: GUI will run without text display due to font loading failure.\n";
-    }
-}
-
-bool BoardRenderer::load_bundled_font() {
-    // Try different paths since executable might run from build/ directory
-    std::vector<std::string> font_paths = {
-        "../assets/gui/fonts/DejaVuSans.ttf",  // From build/ directory
-        "assets/gui/fonts/DejaVuSans.ttf"      // From project root
-    };
-
-    for (auto const& path : font_paths) {
-        if (m_font.loadFromFile(path)) {
-            std::cout << "Loaded bundled font: " << path << std::endl;
-            return true;
-        }
-    }
-
-    std::cerr << "Error: Could not load bundled font from any of these paths:" << std::endl;
-    for (auto const& path : font_paths) {
-        std::cerr << "  - " << path << std::endl;
-    }
-    std::cerr << "Text will not be displayed in the GUI." << std::endl;
-    return false;
+    m_font.loadFromMemory(GUI::FONT_BYTES, sizeof(GUI::FONT_BYTES));
 }
 
 void BoardRenderer::render(Board const& board, Player current_player, int actions_left,

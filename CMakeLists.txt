@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 
+find_package(Python REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(gflags REQUIRED)
 find_package(glog REQUIRED)
@@ -69,6 +70,21 @@ if(SFML_FOUND)
     message(STATUS "SFML found - GUI support enabled")
     set(GUI_ENABLED TRUE)
     
+    # Convert font to header file
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/font.hpp
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_SOURCE_DIR}/src/gui
+        COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/convert_font.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets/gui/fonts/DejaVuSans.ttf
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/font.hpp
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/scripts/convert_font.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets/gui/fonts/DejaVuSans.ttf
+        COMMENT "Converting font to header file"
+    )
+    
+    # Add the generated font header as a dependency
+    add_custom_target(font_header DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/gui/font.hpp)
+    
     # Add GUI source files to core library
     target_sources(core PRIVATE
         src/gui/gui_utils.cpp
@@ -76,6 +92,9 @@ if(SFML_FOUND)
         src/gui/board_renderer.cpp
         src/gui/game_gui.cpp
     )
+    
+    # Make core depend on the font header
+    add_dependencies(core font_header)
     
     # Link SFML libraries - handle both pkg-config and find_package results
     if(SFML_LIBRARIES)

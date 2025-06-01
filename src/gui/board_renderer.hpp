@@ -71,9 +71,6 @@ private:
     // Helper functions
     std::vector<Cell> get_cells_at_distance1(Board const& board, Player player);
     std::vector<Cell> get_cells_at_distance2(Board const& board, Player player);
-
-    // Font loading helper
-    bool load_bundled_font();
 };
 
 }  // namespace GUI
