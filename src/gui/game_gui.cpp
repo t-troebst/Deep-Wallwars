@@ -352,14 +352,6 @@ GameRecorder interactive_play_gui(Board board, InteractivePlayOptions opts,
     // Ask for player choice before creating GUI window
     bool human_goes_first = GameGUI::ask_human_goes_first();
 
-    // Limit parallelism for GUI mode to prevent threading issues
-    int safe_parallelism = std::min(opts.max_parallel_samples, 4);
-    if (safe_parallelism != opts.max_parallel_samples) {
-        std::cout << "Limiting parallelism to " << safe_parallelism << " for GUI mode (was "
-                  << opts.max_parallel_samples << ")\n";
-        opts.max_parallel_samples = safe_parallelism;
-    }
-
     GameGUI gui(GUI::DEFAULT_WINDOW_WIDTH, GUI::DEFAULT_WINDOW_HEIGHT, board.columns(),
                 board.rows());
     return gui.run_interactive_game(std::move(board), opts.model, opts, human_goes_first,
