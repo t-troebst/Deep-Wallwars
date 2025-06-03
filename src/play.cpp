@@ -260,11 +260,12 @@ folly::coro::Task<std::pair<std::vector<size_t>, std::vector<GameRecorder>>> run
     std::vector<size_t> next_round;
     std::vector<GameRecorder> round_recorders;
 
-    std::vector<folly::coro::Task<std::pair<std::pair<size_t, size_t>, GameRecorder>>> game_tasks;
-
     for (size_t i = 0; i < model_indices.size() - 1; i += 2) {
         size_t model1_idx = model_indices[i];
         size_t model2_idx = model_indices[i + 1];
+
+        XLOGF(INFO, "Starting matchup between {} and {}", opts.models[model1_idx].name,
+              opts.models[model2_idx].name);
 
         EvaluationPlayOptions eval_opts{
             .model1 = opts.models[model1_idx],
@@ -274,29 +275,14 @@ folly::coro::Task<std::pair<std::vector<size_t>, std::vector<GameRecorder>>> run
             .move_limit = opts.move_limit,
             .seed = static_cast<std::uint32_t>(opts.seed * (model1_idx + 1) * (model2_idx + 1))};
 
-        for (int game_idx = 0; game_idx < opts.games_per_matchup; ++game_idx) {
-            game_tasks.push_back(folly::coro::co_invoke(
-                [&, model1_idx, model2_idx, eval_opts, game_idx]()
-                    -> folly::coro::Task<std::pair<std::pair<size_t, size_t>, GameRecorder>> {
-                    auto recorder = co_await evaluation_play_single(board, game_idx, eval_opts)
-                                        .scheduleOn(executor);
-                    co_return {{model1_idx, model2_idx}, std::move(recorder)};
-                }));
-        }
-    }
+        auto game_tasks =
+            views::iota(0, opts.games_per_matchup) | views::transform([&](int game_idx) {
+                return evaluation_play_single(board, game_idx, eval_opts).scheduleOn(executor);
+            });
+        auto matchup_recorders = co_await folly::coro::collectAllWindowed(std::move(game_tasks),
+                                                                          opts.max_parallel_games);
 
-    auto game_results =
-        co_await folly::coro::collectAllWindowed(std::move(game_tasks), opts.max_parallel_games);
-
-    std::unordered_map<std::pair<size_t, size_t>, std::vector<GameRecorder>> matchup_results;
-    for (auto& [matchup, recorder] : game_results) {
-        matchup_results[matchup].push_back(std::move(recorder));
-    }
-
-    for (auto& [matchup, recorders] : matchup_results) {
-        auto [model1_idx, model2_idx] = matchup;
-
-        auto results = tally_results(recorders);
+        auto results = tally_results(matchup_recorders);
         auto const& model1_results = results[opts.models[model1_idx].name];
         auto const& model2_results = results[opts.models[model2_idx].name];
 
@@ -304,7 +290,8 @@ folly::coro::Task<std::pair<std::vector<size_t>, std::vector<GameRecorder>>> run
         int model2_score = model2_results.wins + model2_results.draws / 2;
 
         next_round.push_back(model1_score >= model2_score ? model1_idx : model2_idx);
-        round_recorders.insert(round_recorders.end(), recorders.begin(), recorders.end());
+        round_recorders.insert(round_recorders.end(), matchup_recorders.begin(),
+                               matchup_recorders.end());
     }
 
     if (model_indices.size() % 2 == 1) {
