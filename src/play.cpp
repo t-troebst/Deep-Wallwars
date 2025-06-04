@@ -5,6 +5,7 @@
 #include <folly/logging/xlog.h>
 
 #include <algorithm>
+#include <fstream>
 #include <iostream>
 #include <random>
 #include <ranges>
@@ -331,6 +332,16 @@ folly::coro::Task<std::vector<GameRecorder>> ranking_play(Board board, RankingPl
         XLOGF(INFO, "Starting tournament {}/{}", i + 1, opts.num_tournaments);
         opts.seed = static_cast<std::uint32_t>(opts.seed * (i + 1));
         auto tournament_recorders = co_await run_tournament(board, opts);
+
+        // Save tournament results
+        std::string json = all_to_json(tournament_recorders);
+        std::ofstream json_file{opts.output_folder / "games.json", std::ios_base::app};
+        json_file << json;
+
+        std::string pgn = all_to_pgn(tournament_recorders);
+        std::ofstream pgn_file{opts.output_folder / "games.pgn", std::ios_base::app};
+        pgn_file << pgn;
+
         all_recorders.insert(all_recorders.end(), tournament_recorders.begin(),
                              tournament_recorders.end());
     }

@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <ranges>
 #include <sstream>
 
 #include "batched_model.hpp"
@@ -22,8 +23,6 @@
 #ifdef GUI_ENABLED
 #include "gui/game_gui.hpp"
 #endif
-
-namespace nv = nvinfer1;
 
 DEFINE_string(model1, "", "Serialized TensorRT Model 1");
 DEFINE_string(model2, "", "Serialized TensorRT Model 2");
@@ -47,6 +46,10 @@ DEFINE_bool(gui, false, "Use GUI instead of console for interactive mode");
 
 DEFINE_string(ranking, "", "Folder of *.trt models to rank against each other");
 DEFINE_int32(tournaments, 10, "Number of tournaments to run for ranking");
+DEFINE_int32(initial_model, 0, "Index of the initial model to use for ranking");
+
+namespace nv = nvinfer1;
+namespace views = std::ranges::views;
 
 int const kBatchedModelQueueSize = 4096;
 
@@ -100,6 +103,7 @@ std::string get_usage_message() {
         << "    ./deep_ww --ranking <model_folder>\n"
         << "  Options:\n"
         << "    --tournaments N    # Number of tournaments to run (default 10)\n"
+        << "    --initial_model N  # Index of the initial model to use for ranking (default 0)\n"
         << "INTERACTIVE: Play against the AI\n"
         << "    ./deep_ww --interactive --model1 <model.trt | simple>\n"
         << "    ./deep_ww --interactive --model1 <model.trt | simple> --gui  # Use GUI instead of "
@@ -242,7 +246,7 @@ void ranking(nv::IRuntime& runtime) {
     std::vector<std::unique_ptr<nv::ICudaEngine>> engines;
     std::vector<NamedModel> models;
 
-    for (auto const& [_, model_path] : model_paths) {
+    for (auto const& [_, model_path] : model_paths | views::drop(FLAGS_initial_model)) {
         auto cached_policy = create_and_validate_model(runtime, model_path.string(), Mode::Ranking);
         models.push_back(NamedModel{std::move(cached_policy), model_path.filename().string()});
     }
@@ -253,19 +257,12 @@ void ranking(nv::IRuntime& runtime) {
 
     auto recorders =
         folly::coro::blockingWait(ranking_play(board, {.models = std::move(models),
+                                                       .output_folder = ranking_folder,
                                                        .samples = FLAGS_samples,
                                                        .games_per_matchup = FLAGS_games,
                                                        .num_tournaments = FLAGS_tournaments,
                                                        .seed = FLAGS_seed})
                                       .scheduleOn(&thread_pool));
-
-    std::string json = all_to_json(recorders);
-    std::ofstream json_file{ranking_folder / "games.json", std::ios_base::app};
-    json_file << json;
-
-    std::string pgn = all_to_pgn(recorders);
-    std::ofstream pgn_file{ranking_folder / "games.pgn", std::ios_base::app};
-    pgn_file << pgn;
 
     XLOGF(INFO, "Output written to {}.pgn/json.", (ranking_folder / "games").string());
 }

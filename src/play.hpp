@@ -3,6 +3,7 @@
 #include <folly/experimental/coro/Task.h>
 
 #include <cstdint>
+#include <filesystem>
 
 #include "game_recorder.hpp"
 #include "gamestate.hpp"
@@ -55,6 +56,7 @@ struct EvaluationPlayOptions {
 
 struct RankingPlayOptions {
     std::vector<NamedModel> models;
+    std::filesystem::path output_folder;
 
     int samples = 1000;
     int games_per_matchup = 10;
