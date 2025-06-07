@@ -1,7 +1,5 @@
 # MCTS with Neural Nets for Wallwars
 
-This project is under active development.
-
 ## Overview
 
 The aim of this project is to develop an AlphaGo-inspired MCTS for the abstract strategy game
@@ -11,10 +9,6 @@ In particular, it is supposed to achieve three objectives:
 1. Be competitive with humans on larger boards.
 2. Beat the negamax-based AI that is already on the website on an 8x8 board.
 3. Train a good model in under 24 hours on consumer hardware.
-
-The current status is that a model trained in 3 hours on an RTX 4080 and i7 13700k easily beats both
-myself and the negamax AI with milliseconds of thinking time per move.
-However, there is still lots of interesting work to be done to create the strongest agent!
 
 ## Design
 
@@ -58,8 +52,8 @@ It is possible to rank the models generated via training (or any set of models i
 the `--ranking` flag to `deep_ww`. This mode plays a series of random tournaments among the models
 and stores all the games in a `json` file (for analysis) and a `pgn` file (for Elo generation).
 The `BayesianElo` tool (see `externals/BayesianElo`) can be used to determine Elo values of the
-models which can be plotted with `scripts/plot_elo.py`. An example for the `5x5_60000` model used
-for unit tests is shown below:
+models which can be plotted with `scripts/plot_elo.py`. An example for the `8x8_750000` model
+is shown below, training took around 100 hours on an RTX 5080:
 
 ![Elo progression during training](assets/plots/elo_progression.png)
 
